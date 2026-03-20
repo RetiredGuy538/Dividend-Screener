@@ -1,0 +1,3489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dividend Panic Screener</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1c2128;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #f0b429;
+    --red: #ef4444;
+    --green: #22c55e;
+    --amber: #f59e0b;
+    --blue: #3b82f6;
+    --serif: 'Libre Baskerville', Georgia, serif;
+    --mono: 'DM Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    min-height: 100vh;
+  }
+
+  /* Header */
+  .header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 28px 40px 24px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 20px;
+  }
+  .header-left h1 {
+    font-family: var(--serif);
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+  }
+  .header-left h1 em {
+    font-style: italic;
+    color: #fff;
+  }
+  .header-left p {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 4px;
+    font-family: var(--mono);
+  }
+  .header-stats {
+    display: flex;
+    gap: 24px;
+    align-items: flex-end;
+  }
+  .stat-pill {
+    text-align: right;
+  }
+  .stat-pill .num {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--text);
+    display: block;
+  }
+  .stat-pill .label {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  /* Controls */
+  .controls {
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 40px;
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .controls label {
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-right: 4px;
+  }
+  .controls select, .controls input {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .controls select:focus, .controls input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .divider { width: 1px; height: 24px; background: var(--border); }
+
+  /* Table wrapper */
+  .table-wrap {
+    padding: 24px 40px;
+    overflow-x: auto;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  thead tr {
+    border-bottom: 2px solid var(--border);
+  }
+  th {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    padding: 10px 12px;
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+  }
+  th:hover { color: var(--text); }
+  th.sorted { color: var(--accent); }
+
+  .data-row {
+    border-bottom: 1px solid #1e2530;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .data-row:hover { background: #1a2030; }
+  td {
+    padding: 11px 12px;
+    vertical-align: middle;
+  }
+  .num { font-family: var(--mono); text-align: right; }
+  .drop-high { color: var(--red); font-weight: 500; }
+
+  .ticker-cell { display: flex; align-items: center; gap: 8px; }
+  .ticker-tag {
+    font-family: var(--mono);
+    font-weight: 500;
+    font-size: 14px;
+    color: var(--accent);
+  }
+  .asset-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+  }
+  .asset-etf { background: #1e3a5f; color: #60a5fa; }
+  .asset-stock { background: #1e3f2a; color: #4ade80; }
+
+  /* Score bar */
+  .score-bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 120px;
+  }
+  .score-bar {
+    height: 6px;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+    flex-shrink: 0;
+  }
+  .score-num {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+    min-width: 32px;
+  }
+
+  /* Tier badges */
+  .tier-badge {
+    font-size: 12px;
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .tier-strong { background: #14291e; color: #4ade80; border: 1px solid #166534; }
+  .tier-watch  { background: #3f2d00; color: #fbbf24; border: 1px solid #78350f; }
+  .tier-hold   { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+  .tier-fair   { background: #3f1515; color: #f87171; border: 1px solid #7f1d1d; }
+
+  /* Detail panel */
+  .detail-row td { padding: 0; }
+  .detail-panel {
+    background: #111827;
+    border-left: 3px solid var(--accent);
+    padding: 20px 24px;
+    margin: 4px 0 8px;
+  }
+  .detail-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+  }
+  .detail-block {
+    min-width: 180px;
+    flex: 1;
+  }
+  .detail-block h4 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin-bottom: 10px;
+    font-family: var(--mono);
+  }
+  .detail-block p {
+    font-size: 13px;
+    margin-bottom: 5px;
+    color: #cbd5e1;
+  }
+  .detail-block strong { color: var(--text); }
+  .news-block { flex: 2; min-width: 280px; }
+  .headline {
+    font-size: 12px;
+    color: var(--muted);
+    border-left: 2px solid var(--border);
+    padding-left: 8px;
+    margin-bottom: 4px;
+    line-height: 1.4;
+  }
+
+  /* Score breakdown bars */
+  .breakdown-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 12px;
+    font-family: var(--mono);
+  }
+  .breakdown-label { min-width: 100px; color: var(--muted); }
+  .breakdown-bar-wrap { flex: 1; background: #1e293b; border-radius: 3px; height: 5px; }
+  .breakdown-bar { height: 5px; border-radius: 3px; background: var(--accent); }
+  .breakdown-val { min-width: 30px; text-align: right; color: var(--text); }
+
+  /* Config info bar */
+  .config-bar {
+    background: #0d1117;
+    border-top: 1px solid var(--border);
+    padding: 10px 40px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: #4b5563;
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .config-bar span { color: #6b7280; }
+  .config-bar strong { color: #9ca3af; }
+
+  /* Empty state */
+  .empty { text-align: center; padding: 60px; color: var(--muted); }
+  .empty h3 { font-family: var(--serif); font-size: 20px; margin-bottom: 8px; }
+
+  @media (max-width: 768px) {
+    .header { padding: 20px; flex-direction: column; align-items: flex-start; }
+    .controls { padding: 12px 20px; }
+    .table-wrap { padding: 16px 20px; }
+    .config-bar { padding: 10px 20px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <h1>Dividend <em>Panic</em> Screener</h1>
+    <p>Updated March 20, 2026 at 09:16 AM · Flags oversold high-yield investments</p>
+  </div>
+  <div class="header-stats">
+    <div class="stat-pill">
+      <span class="num" id="stat-screened">0</span>
+      <span class="label">Screened</span>
+    </div>
+    <div class="stat-pill">
+      <span class="num" id="stat-signals">0</span>
+      <span class="label">Signals</span>
+    </div>
+    <div class="stat-pill">
+      <span class="num" id="stat-watching">0</span>
+      <span class="label">Watch List</span>
+    </div>
+  </div>
+</div>
+
+<div class="controls">
+  <label>Min Score</label>
+  <input type="number" id="filter-score" value="0" min="0" max="100" style="width:70px" oninput="applyFilters()">
+  <div class="divider"></div>
+  <label>Min Yield</label>
+  <input type="number" id="filter-yield" value="3.0" min="0" max="20" step="0.5" style="width:70px" oninput="applyFilters()">%
+  <div class="divider"></div>
+  <label>Min Streak</label>
+  <input type="number" id="filter-streak" value="5" min="0" max="50" style="width:60px" oninput="applyFilters()">
+  <div class="divider"></div>
+  <label>Type</label>
+  <select id="filter-type" onchange="applyFilters()">
+    <option value="">All</option>
+    <option value="Stock">Stocks</option>
+    <option value="ETF">ETFs</option>
+  </select>
+  <div class="divider"></div>
+  <label>Sort</label>
+  <select id="sort-col" onchange="applyFilters()">
+    <option value="opportunity_score">Opportunity Score</option>
+    <option value="div_yield">Dividend Yield</option>
+    <option value="drop_from_52w">Drop from 52W High</option>
+    <option value="dividend_streak">Dividend Streak</option>
+  </select>
+</div>
+
+<div class="table-wrap">
+  <table id="main-table">
+    <thead>
+      <tr>
+        <th>Ticker</th>
+        <th>Name</th>
+        <th>Sector</th>
+        <th>Opp. Score ▼</th>
+        <th>Signal</th>
+        <th class="num">Yield</th>
+        <th class="num">Growth Streak</th>
+        <th class="num">vs 52W Hi</th>
+        <th class="num">vs MA50</th>
+        <th class="num">Fwd P/E</th>
+        <th class="num">Hist P/E</th>
+        <th>Analyst Rating</th>
+      </tr>
+    </thead>
+    <tbody id="table-body">
+      
+        <tr class="data-row" data-ticker="CLX" onclick="toggleDetail('CLX')">
+          <td class="ticker-cell">
+            <span class="ticker-tag">CLX</span>
+            <span class="asset-badge asset-stock">Stock</span>
+          </td>
+          <td class="name-cell">The Clorox Company</td>
+          <td>Consumer Defensive</td>
+          <td class="score-cell">
+            <div class="score-bar-wrap">
+              <div class="score-bar" style="width:91.0%; background:#4ade80"></div>
+              <span class="score-num">91.0</span>
+            </div>
+          </td>
+          <td><span class="tier-badge tier-strong">Strong Buy</span></td>
+          <td class="num">4.65%</td>
+          <td class="num">38 yrs</td>
+          <td class="num">-25.2%</td>
+          <td class="num">-7.4%</td>
+          <td class="num">15.68</td>
+          <td class="num">61.08</td>
+          <td>Hold 🟡</td>
+        </tr>
+        <tr class="detail-row" id="detail-CLX" style="display:none">
+          <td colspan="12">
+            <div class="detail-panel">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>📊 Score Breakdown</h4>
+                  
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs 52W High</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:100%"></div>
+          </div>
+          <span class="breakdown-val">100</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs MA-50</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:92.6%"></div>
+          </div>
+          <span class="breakdown-val">93</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Yield Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:100%"></div>
+          </div>
+          <span class="breakdown-val">100</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">P/E Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:100%"></div>
+          </div>
+          <span class="breakdown-val">100</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Sentiment</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:50%"></div>
+          </div>
+          <span class="breakdown-val">50</span>
+        </div>
+                </div>
+                <div class="detail-block">
+                  <h4>💰 Dividend Details</h4>
+                  <p>Current Yield: <strong>4.65%</strong></p>
+                  <p>Growth/Hold Streak: <strong>38 yrs</strong> (no cuts)</p>
+                  <p>Payout Ratio: <strong>80.5%</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📈 Valuation</h4>
+                  <p>Forward P/E: <strong>15.68</strong></p>
+                  <p>Trailing P/E: <strong>17.5</strong></p>
+                  <p>Avg Historical P/E: <strong>61.08</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📉 Price Action</h4>
+                  <p>Current: <strong>$106.9</strong></p>
+                  <p>52-Week High: <strong>$142.83</strong></p>
+                  <p>50-Day MA: <strong>$115.45</strong></p>
+                  <p>200-Day MA: <strong>$114.6</strong></p>
+                </div>
+                <div class="detail-block news-block">
+                  <h4>📊 Analyst Rating</h4>
+                  <p>Consensus: <strong>Hold 🟡</strong></p>
+                  <p>Recommendation: <strong>3.1/5.0 (17 analysts) · Target $123.47</strong></p>
+                  
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        
+        <tr class="data-row" data-ticker="GPC" onclick="toggleDetail('GPC')">
+          <td class="ticker-cell">
+            <span class="ticker-tag">GPC</span>
+            <span class="asset-badge asset-stock">Stock</span>
+          </td>
+          <td class="name-cell">Genuine Parts Company</td>
+          <td>Consumer Cyclical</td>
+          <td class="score-cell">
+            <div class="score-bar-wrap">
+              <div class="score-bar" style="width:87.9%; background:#4ade80"></div>
+              <span class="score-num">87.9</span>
+            </div>
+          </td>
+          <td><span class="tier-badge tier-strong">Strong Buy</span></td>
+          <td class="num">4.29%</td>
+          <td class="num">39 yrs</td>
+          <td class="num">-33.4%</td>
+          <td class="num">-21.6%</td>
+          <td class="num">11.51</td>
+          <td class="num">17.6</td>
+          <td>Buy 🟢</td>
+        </tr>
+        <tr class="detail-row" id="detail-GPC" style="display:none">
+          <td colspan="12">
+            <div class="detail-panel">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>📊 Score Breakdown</h4>
+                  
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs 52W High</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:100%"></div>
+          </div>
+          <span class="breakdown-val">100</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs MA-50</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:100%"></div>
+          </div>
+          <span class="breakdown-val">100</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Yield Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:93.0%"></div>
+          </div>
+          <span class="breakdown-val">93</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">P/E Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:69.2%"></div>
+          </div>
+          <span class="breakdown-val">69</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Sentiment</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:70%"></div>
+          </div>
+          <span class="breakdown-val">70</span>
+        </div>
+                </div>
+                <div class="detail-block">
+                  <h4>💰 Dividend Details</h4>
+                  <p>Current Yield: <strong>4.29%</strong></p>
+                  <p>Growth/Hold Streak: <strong>39 yrs</strong> (no cuts)</p>
+                  <p>Payout Ratio: <strong>876.6%</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📈 Valuation</h4>
+                  <p>Forward P/E: <strong>11.51</strong></p>
+                  <p>Trailing P/E: <strong>209.65</strong></p>
+                  <p>Avg Historical P/E: <strong>17.6</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📉 Price Action</h4>
+                  <p>Current: <strong>$98.54</strong></p>
+                  <p>52-Week High: <strong>$147.91</strong></p>
+                  <p>50-Day MA: <strong>$125.64</strong></p>
+                  <p>200-Day MA: <strong>$127.35</strong></p>
+                </div>
+                <div class="detail-block news-block">
+                  <h4>📊 Analyst Rating</h4>
+                  <p>Consensus: <strong>Buy 🟢</strong></p>
+                  <p>Recommendation: <strong>2.3/5.0 (8 analysts) · Target $140.38</strong></p>
+                  
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        
+        <tr class="data-row" data-ticker="ARCC" onclick="toggleDetail('ARCC')">
+          <td class="ticker-cell">
+            <span class="ticker-tag">ARCC</span>
+            <span class="asset-badge asset-stock">Stock</span>
+          </td>
+          <td class="name-cell">Ares Capital Corporation</td>
+          <td>Financial Services</td>
+          <td class="score-cell">
+            <div class="score-bar-wrap">
+              <div class="score-bar" style="width:87.2%; background:#4ade80"></div>
+              <span class="score-num">87.2</span>
+            </div>
+          </td>
+          <td><span class="tier-badge tier-strong">Strong Buy</span></td>
+          <td class="num">10.56%</td>
+          <td class="num">5 yrs</td>
+          <td class="num">-16.5%</td>
+          <td class="num">-5.0%</td>
+          <td class="num">9.39</td>
+          <td class="num">9.08</td>
+          <td>Buy 🟢</td>
+        </tr>
+        <tr class="detail-row" id="detail-ARCC" style="display:none">
+          <td colspan="12">
+            <div class="detail-panel">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>📊 Score Breakdown</h4>
+                  
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs 52W High</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:100%"></div>
+          </div>
+          <span class="breakdown-val">100</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs MA-50</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:62.0%"></div>
+          </div>
+          <span class="breakdown-val">62</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Yield Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:100%"></div>
+          </div>
+          <span class="breakdown-val">100</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">P/E Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:96.6%"></div>
+          </div>
+          <span class="breakdown-val">97</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Sentiment</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:70%"></div>
+          </div>
+          <span class="breakdown-val">70</span>
+        </div>
+                </div>
+                <div class="detail-block">
+                  <h4>💰 Dividend Details</h4>
+                  <p>Current Yield: <strong>10.56%</strong></p>
+                  <p>Growth/Hold Streak: <strong>5 yrs</strong> (no cuts)</p>
+                  <p>Payout Ratio: <strong>103.2%</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📈 Valuation</h4>
+                  <p>Forward P/E: <strong>9.39</strong></p>
+                  <p>Trailing P/E: <strong>9.72</strong></p>
+                  <p>Avg Historical P/E: <strong>9.08</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📉 Price Action</h4>
+                  <p>Current: <strong>$18.07</strong></p>
+                  <p>52-Week High: <strong>$21.64</strong></p>
+                  <p>50-Day MA: <strong>$19.01</strong></p>
+                  <p>200-Day MA: <strong>$19.77</strong></p>
+                </div>
+                <div class="detail-block news-block">
+                  <h4>📊 Analyst Rating</h4>
+                  <p>Consensus: <strong>Buy 🟢</strong></p>
+                  <p>Recommendation: <strong>1.6/5.0 (13 analysts) · Target $21.88</strong></p>
+                  
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        
+        <tr class="data-row" data-ticker="WMT" onclick="toggleDetail('WMT')">
+          <td class="ticker-cell">
+            <span class="ticker-tag">WMT</span>
+            <span class="asset-badge asset-stock">Stock</span>
+          </td>
+          <td class="name-cell">Walmart Inc.</td>
+          <td>Consumer Defensive</td>
+          <td class="score-cell">
+            <div class="score-bar-wrap">
+              <div class="score-bar" style="width:85.1%; background:#4ade80"></div>
+              <span class="score-num">85.1</span>
+            </div>
+          </td>
+          <td><span class="tier-badge tier-strong">Strong Buy</span></td>
+          <td class="num">82.0%</td>
+          <td class="num">43 yrs</td>
+          <td class="num">-10.5%</td>
+          <td class="num">-3.0%</td>
+          <td class="num">36.49</td>
+          <td class="num">36.04</td>
+          <td>Strong Buy 🟢</td>
+        </tr>
+        <tr class="detail-row" id="detail-WMT" style="display:none">
+          <td colspan="12">
+            <div class="detail-panel">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>📊 Score Breakdown</h4>
+                  
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs 52W High</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:100%"></div>
+          </div>
+          <span class="breakdown-val">100</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs MA-50</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:38.0%"></div>
+          </div>
+          <span class="breakdown-val">38</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Yield Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:100%"></div>
+          </div>
+          <span class="breakdown-val">100</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">P/E Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:98.8%"></div>
+          </div>
+          <span class="breakdown-val">99</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Sentiment</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:85%"></div>
+          </div>
+          <span class="breakdown-val">85</span>
+        </div>
+                </div>
+                <div class="detail-block">
+                  <h4>💰 Dividend Details</h4>
+                  <p>Current Yield: <strong>82.0%</strong></p>
+                  <p>Growth/Hold Streak: <strong>43 yrs</strong> (no cuts)</p>
+                  <p>Payout Ratio: <strong>34.4%</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📈 Valuation</h4>
+                  <p>Forward P/E: <strong>36.49</strong></p>
+                  <p>Trailing P/E: <strong>44.05</strong></p>
+                  <p>Avg Historical P/E: <strong>36.04</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📉 Price Action</h4>
+                  <p>Current: <strong>$119.82</strong></p>
+                  <p>52-Week High: <strong>$133.89</strong></p>
+                  <p>50-Day MA: <strong>$123.58</strong></p>
+                  <p>200-Day MA: <strong>$107.87</strong></p>
+                </div>
+                <div class="detail-block news-block">
+                  <h4>📊 Analyst Rating</h4>
+                  <p>Consensus: <strong>Strong Buy 🟢</strong></p>
+                  <p>Recommendation: <strong>1.4/5.0 (41 analysts) · Target $136.02</strong></p>
+                  
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        
+        <tr class="data-row" data-ticker="VICI" onclick="toggleDetail('VICI')">
+          <td class="ticker-cell">
+            <span class="ticker-tag">VICI</span>
+            <span class="asset-badge asset-stock">Stock</span>
+          </td>
+          <td class="name-cell">VICI Properties Inc.</td>
+          <td>Real Estate</td>
+          <td class="score-cell">
+            <div class="score-bar-wrap">
+              <div class="score-bar" style="width:79.9%; background:#4ade80"></div>
+              <span class="score-num">79.9</span>
+            </div>
+          </td>
+          <td><span class="tier-badge tier-strong">Strong Buy</span></td>
+          <td class="num">6.37%</td>
+          <td class="num">7 yrs</td>
+          <td class="num">-16.1%</td>
+          <td class="num">-4.4%</td>
+          <td class="num">9.45</td>
+          <td class="num">14.2</td>
+          <td>Buy 🟢</td>
+        </tr>
+        <tr class="detail-row" id="detail-VICI" style="display:none">
+          <td colspan="12">
+            <div class="detail-panel">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>📊 Score Breakdown</h4>
+                  
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs 52W High</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:100%"></div>
+          </div>
+          <span class="breakdown-val">100</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs MA-50</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:55.1%"></div>
+          </div>
+          <span class="breakdown-val">55</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Yield Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:100%"></div>
+          </div>
+          <span class="breakdown-val">100</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">P/E Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:66.9%"></div>
+          </div>
+          <span class="breakdown-val">67</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Sentiment</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:70%"></div>
+          </div>
+          <span class="breakdown-val">70</span>
+        </div>
+                </div>
+                <div class="detail-block">
+                  <h4>💰 Dividend Details</h4>
+                  <p>Current Yield: <strong>6.37%</strong></p>
+                  <p>Growth/Hold Streak: <strong>7 yrs</strong> (no cuts)</p>
+                  <p>Payout Ratio: <strong>67.6%</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📈 Valuation</h4>
+                  <p>Forward P/E: <strong>9.45</strong></p>
+                  <p>Trailing P/E: <strong>10.59</strong></p>
+                  <p>Avg Historical P/E: <strong>14.2</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📉 Price Action</h4>
+                  <p>Current: <strong>$27.64</strong></p>
+                  <p>52-Week High: <strong>$32.93</strong></p>
+                  <p>50-Day MA: <strong>$28.91</strong></p>
+                  <p>200-Day MA: <strong>$30.22</strong></p>
+                </div>
+                <div class="detail-block news-block">
+                  <h4>📊 Analyst Rating</h4>
+                  <p>Consensus: <strong>Buy 🟢</strong></p>
+                  <p>Recommendation: <strong>1.8/5.0 (23 analysts) · Target $34.78</strong></p>
+                  
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        
+        <tr class="data-row" data-ticker="MAIN" onclick="toggleDetail('MAIN')">
+          <td class="ticker-cell">
+            <span class="ticker-tag">MAIN</span>
+            <span class="asset-badge asset-stock">Stock</span>
+          </td>
+          <td class="name-cell">Main Street Capital Corporation</td>
+          <td>Financial Services</td>
+          <td class="score-cell">
+            <div class="score-bar-wrap">
+              <div class="score-bar" style="width:79.7%; background:#4ade80"></div>
+              <span class="score-num">79.7</span>
+            </div>
+          </td>
+          <td><span class="tier-badge tier-strong">Strong Buy</span></td>
+          <td class="num">5.6%</td>
+          <td class="num">5 yrs</td>
+          <td class="num">-15.3%</td>
+          <td class="num">-7.7%</td>
+          <td class="num">13.46</td>
+          <td class="num">8.44</td>
+          <td>Hold 🟡</td>
+        </tr>
+        <tr class="detail-row" id="detail-MAIN" style="display:none">
+          <td colspan="12">
+            <div class="detail-panel">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>📊 Score Breakdown</h4>
+                  
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs 52W High</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:100%"></div>
+          </div>
+          <span class="breakdown-val">100</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs MA-50</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:95.6%"></div>
+          </div>
+          <span class="breakdown-val">96</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Yield Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:100%"></div>
+          </div>
+          <span class="breakdown-val">100</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">P/E Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:40.5%"></div>
+          </div>
+          <span class="breakdown-val">40</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Sentiment</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:50%"></div>
+          </div>
+          <span class="breakdown-val">50</span>
+        </div>
+                </div>
+                <div class="detail-block">
+                  <h4>💰 Dividend Details</h4>
+                  <p>Current Yield: <strong>5.6%</strong></p>
+                  <p>Growth/Hold Streak: <strong>5 yrs</strong> (no cuts)</p>
+                  <p>Payout Ratio: <strong>76.8%</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📈 Valuation</h4>
+                  <p>Forward P/E: <strong>13.46</strong></p>
+                  <p>Trailing P/E: <strong>9.96</strong></p>
+                  <p>Avg Historical P/E: <strong>8.44</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📉 Price Action</h4>
+                  <p>Current: <strong>$54.98</strong></p>
+                  <p>52-Week High: <strong>$64.94</strong></p>
+                  <p>50-Day MA: <strong>$59.53</strong></p>
+                  <p>200-Day MA: <strong>$59.39</strong></p>
+                </div>
+                <div class="detail-block news-block">
+                  <h4>📊 Analyst Rating</h4>
+                  <p>Consensus: <strong>Hold 🟡</strong></p>
+                  <p>Recommendation: <strong>2.7/5.0 (6 analysts) · Target $63.83</strong></p>
+                  
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        
+        <tr class="data-row" data-ticker="ADP" onclick="toggleDetail('ADP')">
+          <td class="ticker-cell">
+            <span class="ticker-tag">ADP</span>
+            <span class="asset-badge asset-stock">Stock</span>
+          </td>
+          <td class="name-cell">Automatic Data Processing, Inc.</td>
+          <td>Technology</td>
+          <td class="score-cell">
+            <div class="score-bar-wrap">
+              <div class="score-bar" style="width:79.0%; background:#4ade80"></div>
+              <span class="score-num">79.0</span>
+            </div>
+          </td>
+          <td><span class="tier-badge tier-strong">Strong Buy</span></td>
+          <td class="num">3.23%</td>
+          <td class="num">23 yrs</td>
+          <td class="num">-33.5%</td>
+          <td class="num">-7.4%</td>
+          <td class="num">17.71</td>
+          <td class="num">30.06</td>
+          <td>Hold 🟡</td>
+        </tr>
+        <tr class="detail-row" id="detail-ADP" style="display:none">
+          <td colspan="12">
+            <div class="detail-panel">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>📊 Score Breakdown</h4>
+                  
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs 52W High</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:100%"></div>
+          </div>
+          <span class="breakdown-val">100</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs MA-50</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:92.9%"></div>
+          </div>
+          <span class="breakdown-val">93</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Yield Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:57.7%"></div>
+          </div>
+          <span class="breakdown-val">58</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">P/E Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:82.2%"></div>
+          </div>
+          <span class="breakdown-val">82</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Sentiment</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:50%"></div>
+          </div>
+          <span class="breakdown-val">50</span>
+        </div>
+                </div>
+                <div class="detail-block">
+                  <h4>💰 Dividend Details</h4>
+                  <p>Current Yield: <strong>3.23%</strong></p>
+                  <p>Growth/Hold Streak: <strong>23 yrs</strong> (no cuts)</p>
+                  <p>Payout Ratio: <strong>60.7%</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📈 Valuation</h4>
+                  <p>Forward P/E: <strong>17.71</strong></p>
+                  <p>Trailing P/E: <strong>20.35</strong></p>
+                  <p>Avg Historical P/E: <strong>30.06</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📉 Price Action</h4>
+                  <p>Current: <strong>$211.85</strong></p>
+                  <p>52-Week High: <strong>$318.79</strong></p>
+                  <p>50-Day MA: <strong>$228.85</strong></p>
+                  <p>200-Day MA: <strong>$268.32</strong></p>
+                </div>
+                <div class="detail-block news-block">
+                  <h4>📊 Analyst Rating</h4>
+                  <p>Consensus: <strong>Hold 🟡</strong></p>
+                  <p>Recommendation: <strong>3.1/5.0 (14 analysts) · Target $272.00</strong></p>
+                  
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        
+        <tr class="data-row" data-ticker="ES" onclick="toggleDetail('ES')">
+          <td class="ticker-cell">
+            <span class="ticker-tag">ES</span>
+            <span class="asset-badge asset-stock">Stock</span>
+          </td>
+          <td class="name-cell">Eversource Energy</td>
+          <td>Utilities</td>
+          <td class="score-cell">
+            <div class="score-bar-wrap">
+              <div class="score-bar" style="width:76.9%; background:#4ade80"></div>
+              <span class="score-num">76.9</span>
+            </div>
+          </td>
+          <td><span class="tier-badge tier-strong">Strong Buy</span></td>
+          <td class="num">4.52%</td>
+          <td class="num">26 yrs</td>
+          <td class="num">-9.6%</td>
+          <td class="num">-3.7%</td>
+          <td class="num">13.18</td>
+          <td class="num">19.62</td>
+          <td>Buy 🟢</td>
+        </tr>
+        <tr class="detail-row" id="detail-ES" style="display:none">
+          <td colspan="12">
+            <div class="detail-panel">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>📊 Score Breakdown</h4>
+                  
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs 52W High</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:95.9%"></div>
+          </div>
+          <span class="breakdown-val">96</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs MA-50</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:46.5%"></div>
+          </div>
+          <span class="breakdown-val">46</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Yield Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:100%"></div>
+          </div>
+          <span class="breakdown-val">100</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">P/E Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:65.6%"></div>
+          </div>
+          <span class="breakdown-val">66</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Sentiment</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:70%"></div>
+          </div>
+          <span class="breakdown-val">70</span>
+        </div>
+                </div>
+                <div class="detail-block">
+                  <h4>💰 Dividend Details</h4>
+                  <p>Current Yield: <strong>4.52%</strong></p>
+                  <p>Growth/Hold Streak: <strong>26 yrs</strong> (no cuts)</p>
+                  <p>Payout Ratio: <strong>66.0%</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📈 Valuation</h4>
+                  <p>Forward P/E: <strong>13.18</strong></p>
+                  <p>Trailing P/E: <strong>14.95</strong></p>
+                  <p>Avg Historical P/E: <strong>19.62</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📉 Price Action</h4>
+                  <p>Current: <strong>$68.18</strong></p>
+                  <p>52-Week High: <strong>$75.41</strong></p>
+                  <p>50-Day MA: <strong>$70.81</strong></p>
+                  <p>200-Day MA: <strong>$66.97</strong></p>
+                </div>
+                <div class="detail-block news-block">
+                  <h4>📊 Analyst Rating</h4>
+                  <p>Consensus: <strong>Buy 🟢</strong></p>
+                  <p>Recommendation: <strong>2.4/5.0 (13 analysts) · Target $75.62</strong></p>
+                  
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        
+        <tr class="data-row" data-ticker="CCI" onclick="toggleDetail('CCI')">
+          <td class="ticker-cell">
+            <span class="ticker-tag">CCI</span>
+            <span class="asset-badge asset-stock">Stock</span>
+          </td>
+          <td class="name-cell">Crown Castle Inc.</td>
+          <td>Real Estate</td>
+          <td class="score-cell">
+            <div class="score-bar-wrap">
+              <div class="score-bar" style="width:76.0%; background:#4ade80"></div>
+              <span class="score-num">76.0</span>
+            </div>
+          </td>
+          <td><span class="tier-badge tier-strong">Strong Buy</span></td>
+          <td class="num">5.0%</td>
+          <td class="num">0</td>
+          <td class="num">-23.1%</td>
+          <td class="num">-1.7%</td>
+          <td class="num">28.62</td>
+          <td class="num">48.02</td>
+          <td>Buy 🟢</td>
+        </tr>
+        <tr class="detail-row" id="detail-CCI" style="display:none">
+          <td colspan="12">
+            <div class="detail-panel">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>📊 Score Breakdown</h4>
+                  
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs 52W High</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:100%"></div>
+          </div>
+          <span class="breakdown-val">100</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs MA-50</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:21.5%"></div>
+          </div>
+          <span class="breakdown-val">22</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Yield Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:100%"></div>
+          </div>
+          <span class="breakdown-val">100</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">P/E Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:80.8%"></div>
+          </div>
+          <span class="breakdown-val">81</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Sentiment</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:70%"></div>
+          </div>
+          <span class="breakdown-val">70</span>
+        </div>
+                </div>
+                <div class="detail-block">
+                  <h4>💰 Dividend Details</h4>
+                  <p>Current Yield: <strong>5.0%</strong></p>
+                  <p>Growth/Hold Streak: <strong>0 yrs</strong> (no cuts)</p>
+                  <p>Payout Ratio: <strong>188.6%</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📈 Valuation</h4>
+                  <p>Forward P/E: <strong>28.62</strong></p>
+                  <p>Trailing P/E: <strong>33.55</strong></p>
+                  <p>Avg Historical P/E: <strong>48.02</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📉 Price Action</h4>
+                  <p>Current: <strong>$84.55</strong></p>
+                  <p>52-Week High: <strong>$109.95</strong></p>
+                  <p>50-Day MA: <strong>$86.03</strong></p>
+                  <p>200-Day MA: <strong>$92.02</strong></p>
+                </div>
+                <div class="detail-block news-block">
+                  <h4>📊 Analyst Rating</h4>
+                  <p>Consensus: <strong>Buy 🟢</strong></p>
+                  <p>Recommendation: <strong>1.9/5.0 (19 analysts) · Target $99.07</strong></p>
+                  
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        
+        <tr class="data-row" data-ticker="PM" onclick="toggleDetail('PM')">
+          <td class="ticker-cell">
+            <span class="ticker-tag">PM</span>
+            <span class="asset-badge asset-stock">Stock</span>
+          </td>
+          <td class="name-cell">Philip Morris International Inc.</td>
+          <td>Consumer Defensive</td>
+          <td class="score-cell">
+            <div class="score-bar-wrap">
+              <div class="score-bar" style="width:72.4%; background:#4ade80"></div>
+              <span class="score-num">72.4</span>
+            </div>
+          </td>
+          <td><span class="tier-badge tier-strong">Strong Buy</span></td>
+          <td class="num">3.6%</td>
+          <td class="num">13 yrs</td>
+          <td class="num">-14.1%</td>
+          <td class="num">-7.6%</td>
+          <td class="num">17.72</td>
+          <td class="num">19.63</td>
+          <td>Buy 🟢</td>
+        </tr>
+        <tr class="detail-row" id="detail-PM" style="display:none">
+          <td colspan="12">
+            <div class="detail-panel">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>📊 Score Breakdown</h4>
+                  
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs 52W High</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:100%"></div>
+          </div>
+          <span class="breakdown-val">100</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs MA-50</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:95.0%"></div>
+          </div>
+          <span class="breakdown-val">95</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Yield Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:70.0%"></div>
+          </div>
+          <span class="breakdown-val">70</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">P/E Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:19.5%"></div>
+          </div>
+          <span class="breakdown-val">20</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Sentiment</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:70%"></div>
+          </div>
+          <span class="breakdown-val">70</span>
+        </div>
+                </div>
+                <div class="detail-block">
+                  <h4>💰 Dividend Details</h4>
+                  <p>Current Yield: <strong>3.6%</strong></p>
+                  <p>Growth/Hold Streak: <strong>13 yrs</strong> (no cuts)</p>
+                  <p>Payout Ratio: <strong>77.6%</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📈 Valuation</h4>
+                  <p>Forward P/E: <strong>17.72</strong></p>
+                  <p>Trailing P/E: <strong>22.42</strong></p>
+                  <p>Avg Historical P/E: <strong>19.63</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📉 Price Action</h4>
+                  <p>Current: <strong>$163.01</strong></p>
+                  <p>52-Week High: <strong>$189.8</strong></p>
+                  <p>50-Day MA: <strong>$176.41</strong></p>
+                  <p>200-Day MA: <strong>$165.25</strong></p>
+                </div>
+                <div class="detail-block news-block">
+                  <h4>📊 Analyst Rating</h4>
+                  <p>Consensus: <strong>Buy 🟢</strong></p>
+                  <p>Recommendation: <strong>1.8/5.0 (16 analysts) · Target $194.84</strong></p>
+                  
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        
+        <tr class="data-row" data-ticker="GBDC" onclick="toggleDetail('GBDC')">
+          <td class="ticker-cell">
+            <span class="ticker-tag">GBDC</span>
+            <span class="asset-badge asset-stock">Stock</span>
+          </td>
+          <td class="name-cell">Golub Capital BDC, Inc.</td>
+          <td>Financial Services</td>
+          <td class="score-cell">
+            <div class="score-bar-wrap">
+              <div class="score-bar" style="width:71.7%; background:#4ade80"></div>
+              <span class="score-num">71.7</span>
+            </div>
+          </td>
+          <td><span class="tier-badge tier-strong">Strong Buy</span></td>
+          <td class="num">11.95%</td>
+          <td class="num">0</td>
+          <td class="num">-12.2%</td>
+          <td class="num">0.1%</td>
+          <td class="num">9.66</td>
+          <td class="num">9.27</td>
+          <td>— no key</td>
+        </tr>
+        <tr class="detail-row" id="detail-GBDC" style="display:none">
+          <td colspan="12">
+            <div class="detail-panel">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>📊 Score Breakdown</h4>
+                  
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs 52W High</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:100%"></div>
+          </div>
+          <span class="breakdown-val">100</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs MA-50</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:0.0%"></div>
+          </div>
+          <span class="breakdown-val">0</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Yield Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:100%"></div>
+          </div>
+          <span class="breakdown-val">100</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">P/E Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:95.8%"></div>
+          </div>
+          <span class="breakdown-val">96</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Sentiment</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:50%"></div>
+          </div>
+          <span class="breakdown-val">50</span>
+        </div>
+                </div>
+                <div class="detail-block">
+                  <h4>💰 Dividend Details</h4>
+                  <p>Current Yield: <strong>11.95%</strong></p>
+                  <p>Growth/Hold Streak: <strong>0 yrs</strong> (no cuts)</p>
+                  <p>Payout Ratio: <strong>124.8%</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📈 Valuation</h4>
+                  <p>Forward P/E: <strong>9.66</strong></p>
+                  <p>Trailing P/E: <strong>10.01</strong></p>
+                  <p>Avg Historical P/E: <strong>9.27</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📉 Price Action</h4>
+                  <p>Current: <strong>$12.52</strong></p>
+                  <p>52-Week High: <strong>$14.26</strong></p>
+                  <p>50-Day MA: <strong>$12.5</strong></p>
+                  <p>200-Day MA: <strong>$13.18</strong></p>
+                </div>
+                <div class="detail-block news-block">
+                  <h4>📊 Analyst Rating</h4>
+                  <p>Consensus: <strong>— no key</strong></p>
+                  <p>Recommendation: <strong>—</strong></p>
+                  
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        
+        <tr class="data-row" data-ticker="MO" onclick="toggleDetail('MO')">
+          <td class="ticker-cell">
+            <span class="ticker-tag">MO</span>
+            <span class="asset-badge asset-stock">Stock</span>
+          </td>
+          <td class="name-cell">Altria Group, Inc.</td>
+          <td>Consumer Defensive</td>
+          <td class="score-cell">
+            <div class="score-bar-wrap">
+              <div class="score-bar" style="width:68.9%; background:#f59e0b"></div>
+              <span class="score-num">68.9</span>
+            </div>
+          </td>
+          <td><span class="tier-badge tier-watch">Watch List</span></td>
+          <td class="num">6.52%</td>
+          <td class="num">16 yrs</td>
+          <td class="num">-7.2%</td>
+          <td class="num">-0.3%</td>
+          <td class="num">11.14</td>
+          <td class="num">10.97</td>
+          <td>Buy 🟢</td>
+        </tr>
+        <tr class="detail-row" id="detail-MO" style="display:none">
+          <td colspan="12">
+            <div class="detail-panel">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>📊 Score Breakdown</h4>
+                  
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs 52W High</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:71.7%"></div>
+          </div>
+          <span class="breakdown-val">72</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs MA-50</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:3.9%"></div>
+          </div>
+          <span class="breakdown-val">4</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Yield Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:100%"></div>
+          </div>
+          <span class="breakdown-val">100</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">P/E Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:98.5%"></div>
+          </div>
+          <span class="breakdown-val">98</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Sentiment</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:70%"></div>
+          </div>
+          <span class="breakdown-val">70</span>
+        </div>
+                </div>
+                <div class="detail-block">
+                  <h4>💰 Dividend Details</h4>
+                  <p>Current Yield: <strong>6.52%</strong></p>
+                  <p>Growth/Hold Streak: <strong>16 yrs</strong> (no cuts)</p>
+                  <p>Payout Ratio: <strong>101.0%</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📈 Valuation</h4>
+                  <p>Forward P/E: <strong>11.14</strong></p>
+                  <p>Trailing P/E: <strong>15.7</strong></p>
+                  <p>Avg Historical P/E: <strong>10.97</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📉 Price Action</h4>
+                  <p>Current: <strong>$64.7</strong></p>
+                  <p>52-Week High: <strong>$69.7</strong></p>
+                  <p>50-Day MA: <strong>$64.9</strong></p>
+                  <p>200-Day MA: <strong>$61.11</strong></p>
+                </div>
+                <div class="detail-block news-block">
+                  <h4>📊 Analyst Rating</h4>
+                  <p>Consensus: <strong>Buy 🟢</strong></p>
+                  <p>Recommendation: <strong>2.5/5.0 (12 analysts) · Target $65.50</strong></p>
+                  
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        
+        <tr class="data-row" data-ticker="AMT" onclick="toggleDetail('AMT')">
+          <td class="ticker-cell">
+            <span class="ticker-tag">AMT</span>
+            <span class="asset-badge asset-stock">Stock</span>
+          </td>
+          <td class="name-cell">American Tower Corporation</td>
+          <td>Real Estate</td>
+          <td class="score-cell">
+            <div class="score-bar-wrap">
+              <div class="score-bar" style="width:68.2%; background:#f59e0b"></div>
+              <span class="score-num">68.2</span>
+            </div>
+          </td>
+          <td><span class="tier-badge tier-watch">Watch List</span></td>
+          <td class="num">3.77%</td>
+          <td class="num">14 yrs</td>
+          <td class="num">-20.5%</td>
+          <td class="num">-0.3%</td>
+          <td class="num">26.24</td>
+          <td class="num">45.51</td>
+          <td>Buy 🟢</td>
+        </tr>
+        <tr class="detail-row" id="detail-AMT" style="display:none">
+          <td colspan="12">
+            <div class="detail-panel">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>📊 Score Breakdown</h4>
+                  
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs 52W High</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:100%"></div>
+          </div>
+          <span class="breakdown-val">100</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs MA-50</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:3.2%"></div>
+          </div>
+          <span class="breakdown-val">3</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Yield Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:75.7%"></div>
+          </div>
+          <span class="breakdown-val">76</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">P/E Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:84.7%"></div>
+          </div>
+          <span class="breakdown-val">85</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Sentiment</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:70%"></div>
+          </div>
+          <span class="breakdown-val">70</span>
+        </div>
+                </div>
+                <div class="detail-block">
+                  <h4>💰 Dividend Details</h4>
+                  <p>Current Yield: <strong>3.77%</strong></p>
+                  <p>Growth/Hold Streak: <strong>14 yrs</strong> (no cuts)</p>
+                  <p>Payout Ratio: <strong>125.9%</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📈 Valuation</h4>
+                  <p>Forward P/E: <strong>26.24</strong></p>
+                  <p>Trailing P/E: <strong>33.64</strong></p>
+                  <p>Avg Historical P/E: <strong>45.51</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📉 Price Action</h4>
+                  <p>Current: <strong>$181.3</strong></p>
+                  <p>52-Week High: <strong>$228.1</strong></p>
+                  <p>50-Day MA: <strong>$181.77</strong></p>
+                  <p>200-Day MA: <strong>$191.18</strong></p>
+                </div>
+                <div class="detail-block news-block">
+                  <h4>📊 Analyst Rating</h4>
+                  <p>Consensus: <strong>Buy 🟢</strong></p>
+                  <p>Recommendation: <strong>1.9/5.0 (21 analysts) · Target $216.52</strong></p>
+                  
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        
+        <tr class="data-row" data-ticker="STAG" onclick="toggleDetail('STAG')">
+          <td class="ticker-cell">
+            <span class="ticker-tag">STAG</span>
+            <span class="asset-badge asset-stock">Stock</span>
+          </td>
+          <td class="name-cell">STAG Industrial, Inc.</td>
+          <td>Real Estate</td>
+          <td class="score-cell">
+            <div class="score-bar-wrap">
+              <div class="score-bar" style="width:66.2%; background:#f59e0b"></div>
+              <span class="score-num">66.2</span>
+            </div>
+          </td>
+          <td><span class="tier-badge tier-watch">Watch List</span></td>
+          <td class="num">4.13%</td>
+          <td class="num">14 yrs</td>
+          <td class="num">-7.5%</td>
+          <td class="num">-3.9%</td>
+          <td class="num">41.74</td>
+          <td class="num">30.53</td>
+          <td>Hold 🟡</td>
+        </tr>
+        <tr class="detail-row" id="detail-STAG" style="display:none">
+          <td colspan="12">
+            <div class="detail-panel">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>📊 Score Breakdown</h4>
+                  
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs 52W High</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:75.5%"></div>
+          </div>
+          <span class="breakdown-val">76</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs MA-50</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:48.4%"></div>
+          </div>
+          <span class="breakdown-val">48</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Yield Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:87.7%"></div>
+          </div>
+          <span class="breakdown-val">88</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">P/E Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:63.3%"></div>
+          </div>
+          <span class="breakdown-val">63</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Sentiment</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:50%"></div>
+          </div>
+          <span class="breakdown-val">50</span>
+        </div>
+                </div>
+                <div class="detail-block">
+                  <h4>💰 Dividend Details</h4>
+                  <p>Current Yield: <strong>4.13%</strong></p>
+                  <p>Growth/Hold Streak: <strong>14 yrs</strong> (no cuts)</p>
+                  <p>Payout Ratio: <strong>102.1%</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📈 Valuation</h4>
+                  <p>Forward P/E: <strong>41.74</strong></p>
+                  <p>Trailing P/E: <strong>25.16</strong></p>
+                  <p>Avg Historical P/E: <strong>30.53</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📉 Price Action</h4>
+                  <p>Current: <strong>$36.73</strong></p>
+                  <p>52-Week High: <strong>$39.73</strong></p>
+                  <p>50-Day MA: <strong>$38.21</strong></p>
+                  <p>200-Day MA: <strong>$36.79</strong></p>
+                </div>
+                <div class="detail-block news-block">
+                  <h4>📊 Analyst Rating</h4>
+                  <p>Consensus: <strong>Hold 🟡</strong></p>
+                  <p>Recommendation: <strong>2.5/5.0 (11 analysts) · Target $41.55</strong></p>
+                  
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        
+        <tr class="data-row" data-ticker="NNN" onclick="toggleDetail('NNN')">
+          <td class="ticker-cell">
+            <span class="ticker-tag">NNN</span>
+            <span class="asset-badge asset-stock">Stock</span>
+          </td>
+          <td class="name-cell">NNN REIT, Inc.</td>
+          <td>Real Estate</td>
+          <td class="score-cell">
+            <div class="score-bar-wrap">
+              <div class="score-bar" style="width:59.4%; background:#f59e0b"></div>
+              <span class="score-num">59.4</span>
+            </div>
+          </td>
+          <td><span class="tier-badge tier-watch">Watch List</span></td>
+          <td class="num">5.43%</td>
+          <td class="num">35 yrs</td>
+          <td class="num">-5.2%</td>
+          <td class="num">0.3%</td>
+          <td class="num">20.48</td>
+          <td class="num">19.41</td>
+          <td>Hold 🟡</td>
+        </tr>
+        <tr class="detail-row" id="detail-NNN" style="display:none">
+          <td colspan="12">
+            <div class="detail-panel">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>📊 Score Breakdown</h4>
+                  
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs 52W High</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:52.1%"></div>
+          </div>
+          <span class="breakdown-val">52</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs MA-50</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:0.0%"></div>
+          </div>
+          <span class="breakdown-val">0</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Yield Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:100%"></div>
+          </div>
+          <span class="breakdown-val">100</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">P/E Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:94.5%"></div>
+          </div>
+          <span class="breakdown-val">94</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Sentiment</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:50%"></div>
+          </div>
+          <span class="breakdown-val">50</span>
+        </div>
+                </div>
+                <div class="detail-block">
+                  <h4>💰 Dividend Details</h4>
+                  <p>Current Yield: <strong>5.43%</strong></p>
+                  <p>Growth/Hold Streak: <strong>35 yrs</strong> (no cuts)</p>
+                  <p>Payout Ratio: <strong>114.0%</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📈 Valuation</h4>
+                  <p>Forward P/E: <strong>20.48</strong></p>
+                  <p>Trailing P/E: <strong>20.99</strong></p>
+                  <p>Avg Historical P/E: <strong>19.41</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📉 Price Action</h4>
+                  <p>Current: <strong>$43.44</strong></p>
+                  <p>52-Week High: <strong>$45.83</strong></p>
+                  <p>50-Day MA: <strong>$43.31</strong></p>
+                  <p>200-Day MA: <strong>$41.27</strong></p>
+                </div>
+                <div class="detail-block news-block">
+                  <h4>📊 Analyst Rating</h4>
+                  <p>Consensus: <strong>Hold 🟡</strong></p>
+                  <p>Recommendation: <strong>2.9/5.0 (15 analysts) · Target $45.23</strong></p>
+                  
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        
+        <tr class="data-row" data-ticker="PFFD" onclick="toggleDetail('PFFD')">
+          <td class="ticker-cell">
+            <span class="ticker-tag">PFFD</span>
+            <span class="asset-badge asset-etf">ETF</span>
+          </td>
+          <td class="name-cell">Global X U.S. Preferred ETF</td>
+          <td>Preferred Stock</td>
+          <td class="score-cell">
+            <div class="score-bar-wrap">
+              <div class="score-bar" style="width:57.8%; background:#f59e0b"></div>
+              <span class="score-num">57.8</span>
+            </div>
+          </td>
+          <td><span class="tier-badge tier-watch">Watch List</span></td>
+          <td class="num">6.25%</td>
+          <td class="num">0</td>
+          <td class="num">-4.8%</td>
+          <td class="num">-3.4%</td>
+          <td class="num">None</td>
+          <td class="num">—</td>
+          <td>— no key</td>
+        </tr>
+        <tr class="detail-row" id="detail-PFFD" style="display:none">
+          <td colspan="12">
+            <div class="detail-panel">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>📊 Score Breakdown</h4>
+                  
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs 52W High</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:47.6%"></div>
+          </div>
+          <span class="breakdown-val">48</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs MA-50</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:42.1%"></div>
+          </div>
+          <span class="breakdown-val">42</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Yield Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:100%"></div>
+          </div>
+          <span class="breakdown-val">100</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">P/E Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:50%"></div>
+          </div>
+          <span class="breakdown-val">50</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Sentiment</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:50%"></div>
+          </div>
+          <span class="breakdown-val">50</span>
+        </div>
+                </div>
+                <div class="detail-block">
+                  <h4>💰 Dividend Details</h4>
+                  <p>Current Yield: <strong>6.25%</strong></p>
+                  <p>Growth/Hold Streak: <strong>0 yrs</strong> (no cuts)</p>
+                  <p>Payout Ratio: <strong>None%</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📈 Valuation</h4>
+                  <p>Forward P/E: <strong>None</strong></p>
+                  <p>Trailing P/E: <strong>None</strong></p>
+                  <p>Avg Historical P/E: <strong>—</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📉 Price Action</h4>
+                  <p>Current: <strong>$18.48</strong></p>
+                  <p>52-Week High: <strong>$19.4</strong></p>
+                  <p>50-Day MA: <strong>$19.12</strong></p>
+                  <p>200-Day MA: <strong>$18.72</strong></p>
+                </div>
+                <div class="detail-block news-block">
+                  <h4>📊 Analyst Rating</h4>
+                  <p>Consensus: <strong>— no key</strong></p>
+                  <p>Recommendation: <strong>—</strong></p>
+                  
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        
+        <tr class="data-row" data-ticker="DVY" onclick="toggleDetail('DVY')">
+          <td class="ticker-cell">
+            <span class="ticker-tag">DVY</span>
+            <span class="asset-badge asset-etf">ETF</span>
+          </td>
+          <td class="name-cell">iShares Select Dividend ETF</td>
+          <td>Mid-Cap Value</td>
+          <td class="score-cell">
+            <div class="score-bar-wrap">
+              <div class="score-bar" style="width:50.0%; background:#f59e0b"></div>
+              <span class="score-num">50.0</span>
+            </div>
+          </td>
+          <td><span class="tier-badge tier-watch">Watch List</span></td>
+          <td class="num">3.29%</td>
+          <td class="num">5 yrs</td>
+          <td class="num">-6.0%</td>
+          <td class="num">-2.3%</td>
+          <td class="num">16.26</td>
+          <td class="num">—</td>
+          <td>— no key</td>
+        </tr>
+        <tr class="detail-row" id="detail-DVY" style="display:none">
+          <td colspan="12">
+            <div class="detail-panel">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>📊 Score Breakdown</h4>
+                  
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs 52W High</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:59.7%"></div>
+          </div>
+          <span class="breakdown-val">60</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs MA-50</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:28.2%"></div>
+          </div>
+          <span class="breakdown-val">28</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Yield Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:59.7%"></div>
+          </div>
+          <span class="breakdown-val">60</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">P/E Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:50%"></div>
+          </div>
+          <span class="breakdown-val">50</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Sentiment</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:50%"></div>
+          </div>
+          <span class="breakdown-val">50</span>
+        </div>
+                </div>
+                <div class="detail-block">
+                  <h4>💰 Dividend Details</h4>
+                  <p>Current Yield: <strong>3.29%</strong></p>
+                  <p>Growth/Hold Streak: <strong>5 yrs</strong> (no cuts)</p>
+                  <p>Payout Ratio: <strong>None%</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📈 Valuation</h4>
+                  <p>Forward P/E: <strong>16.26</strong></p>
+                  <p>Trailing P/E: <strong>16.26</strong></p>
+                  <p>Avg Historical P/E: <strong>—</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📉 Price Action</h4>
+                  <p>Current: <strong>$147.37</strong></p>
+                  <p>52-Week High: <strong>$156.73</strong></p>
+                  <p>50-Day MA: <strong>$150.78</strong></p>
+                  <p>200-Day MA: <strong>$139.61</strong></p>
+                </div>
+                <div class="detail-block news-block">
+                  <h4>📊 Analyst Rating</h4>
+                  <p>Consensus: <strong>— no key</strong></p>
+                  <p>Recommendation: <strong>—</strong></p>
+                  
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        
+        <tr class="data-row" data-ticker="TGT" onclick="toggleDetail('TGT')">
+          <td class="ticker-cell">
+            <span class="ticker-tag">TGT</span>
+            <span class="asset-badge asset-stock">Stock</span>
+          </td>
+          <td class="name-cell">Target Corporation</td>
+          <td>Consumer Defensive</td>
+          <td class="score-cell">
+            <div class="score-bar-wrap">
+              <div class="score-bar" style="width:48.0%; background:#6b7280"></div>
+              <span class="score-num">48.0</span>
+            </div>
+          </td>
+          <td><span class="tier-badge tier-hold">⏳ Hold</span></td>
+          <td class="num">3.98%</td>
+          <td class="num">42 yrs</td>
+          <td class="num">-6.0%</td>
+          <td class="num">1.0%</td>
+          <td class="num">13.34</td>
+          <td class="num">17.12</td>
+          <td>Hold 🟡</td>
+        </tr>
+        <tr class="detail-row" id="detail-TGT" style="display:none">
+          <td colspan="12">
+            <div class="detail-panel">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>📊 Score Breakdown</h4>
+                  
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs 52W High</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:60.4%"></div>
+          </div>
+          <span class="breakdown-val">60</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs MA-50</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:0.0%"></div>
+          </div>
+          <span class="breakdown-val">0</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Yield Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:82.7%"></div>
+          </div>
+          <span class="breakdown-val">83</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">P/E Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:44.2%"></div>
+          </div>
+          <span class="breakdown-val">44</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Sentiment</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:50%"></div>
+          </div>
+          <span class="breakdown-val">50</span>
+        </div>
+                </div>
+                <div class="detail-block">
+                  <h4>💰 Dividend Details</h4>
+                  <p>Current Yield: <strong>3.98%</strong></p>
+                  <p>Growth/Hold Streak: <strong>42 yrs</strong> (no cuts)</p>
+                  <p>Payout Ratio: <strong>55.6%</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📈 Valuation</h4>
+                  <p>Forward P/E: <strong>13.34</strong></p>
+                  <p>Trailing P/E: <strong>13.96</strong></p>
+                  <p>Avg Historical P/E: <strong>17.12</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📉 Price Action</h4>
+                  <p>Current: <strong>$113.5</strong></p>
+                  <p>52-Week High: <strong>$120.8</strong></p>
+                  <p>50-Day MA: <strong>$112.36</strong></p>
+                  <p>200-Day MA: <strong>$98.23</strong></p>
+                </div>
+                <div class="detail-block news-block">
+                  <h4>📊 Analyst Rating</h4>
+                  <p>Consensus: <strong>Hold 🟡</strong></p>
+                  <p>Recommendation: <strong>2.6/5.0 (32 analysts) · Target $124.88</strong></p>
+                  
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        
+        <tr class="data-row" data-ticker="SCHD" onclick="toggleDetail('SCHD')">
+          <td class="ticker-cell">
+            <span class="ticker-tag">SCHD</span>
+            <span class="asset-badge asset-etf">ETF</span>
+          </td>
+          <td class="name-cell">Schwab U.S. Dividend Equity ETF</td>
+          <td>Large Value</td>
+          <td class="score-cell">
+            <div class="score-bar-wrap">
+              <div class="score-bar" style="width:43.0%; background:#6b7280"></div>
+              <span class="score-num">43.0</span>
+            </div>
+          </td>
+          <td><span class="tier-badge tier-hold">⏳ Hold</span></td>
+          <td class="num">3.3%</td>
+          <td class="num">14 yrs</td>
+          <td class="num">-4.3%</td>
+          <td class="num">-0.0%</td>
+          <td class="num">19.23</td>
+          <td class="num">—</td>
+          <td>— no key</td>
+        </tr>
+        <tr class="detail-row" id="detail-SCHD" style="display:none">
+          <td colspan="12">
+            <div class="detail-panel">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>📊 Score Breakdown</h4>
+                  
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs 52W High</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:53.6%"></div>
+          </div>
+          <span class="breakdown-val">54</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs MA-50</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:0.2%"></div>
+          </div>
+          <span class="breakdown-val">0</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Yield Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:60.0%"></div>
+          </div>
+          <span class="breakdown-val">60</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">P/E Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:50%"></div>
+          </div>
+          <span class="breakdown-val">50</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Sentiment</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:50%"></div>
+          </div>
+          <span class="breakdown-val">50</span>
+        </div>
+                </div>
+                <div class="detail-block">
+                  <h4>💰 Dividend Details</h4>
+                  <p>Current Yield: <strong>3.3%</strong></p>
+                  <p>Growth/Hold Streak: <strong>14 yrs</strong> (no cuts)</p>
+                  <p>Payout Ratio: <strong>None%</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📈 Valuation</h4>
+                  <p>Forward P/E: <strong>19.23</strong></p>
+                  <p>Trailing P/E: <strong>19.23</strong></p>
+                  <p>Avg Historical P/E: <strong>—</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📉 Price Action</h4>
+                  <p>Current: <strong>$30.49</strong></p>
+                  <p>52-Week High: <strong>$31.86</strong></p>
+                  <p>50-Day MA: <strong>$30.5</strong></p>
+                  <p>200-Day MA: <strong>$27.71</strong></p>
+                </div>
+                <div class="detail-block news-block">
+                  <h4>📊 Analyst Rating</h4>
+                  <p>Consensus: <strong>— no key</strong></p>
+                  <p>Recommendation: <strong>—</strong></p>
+                  
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        
+        <tr class="data-row" data-ticker="VZ" onclick="toggleDetail('VZ')">
+          <td class="ticker-cell">
+            <span class="ticker-tag">VZ</span>
+            <span class="asset-badge asset-stock">Stock</span>
+          </td>
+          <td class="name-cell">Verizon Communications Inc.</td>
+          <td>Communication Servic</td>
+          <td class="score-cell">
+            <div class="score-bar-wrap">
+              <div class="score-bar" style="width:37.9%; background:#6b7280"></div>
+              <span class="score-num">37.9</span>
+            </div>
+          </td>
+          <td><span class="tier-badge tier-hold">⏳ Hold</span></td>
+          <td class="num">5.72%</td>
+          <td class="num">24 yrs</td>
+          <td class="num">-2.6%</td>
+          <td class="num">8.2%</td>
+          <td class="num">9.51</td>
+          <td class="num">10.28</td>
+          <td>Buy 🟢</td>
+        </tr>
+        <tr class="detail-row" id="detail-VZ" style="display:none">
+          <td colspan="12">
+            <div class="detail-panel">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>📊 Score Breakdown</h4>
+                  
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs 52W High</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:17.5%"></div>
+          </div>
+          <span class="breakdown-val">18</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs MA-50</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:0.0%"></div>
+          </div>
+          <span class="breakdown-val">0</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Yield Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:100%"></div>
+          </div>
+          <span class="breakdown-val">100</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">P/E Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:15.0%"></div>
+          </div>
+          <span class="breakdown-val">15</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Sentiment</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:70%"></div>
+          </div>
+          <span class="breakdown-val">70</span>
+        </div>
+                </div>
+                <div class="detail-block">
+                  <h4>💰 Dividend Details</h4>
+                  <p>Current Yield: <strong>5.72%</strong></p>
+                  <p>Growth/Hold Streak: <strong>24 yrs</strong> (no cuts)</p>
+                  <p>Payout Ratio: <strong>50.4%</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📈 Valuation</h4>
+                  <p>Forward P/E: <strong>9.51</strong></p>
+                  <p>Trailing P/E: <strong>12.32</strong></p>
+                  <p>Avg Historical P/E: <strong>10.28</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📉 Price Action</h4>
+                  <p>Current: <strong>$50.03</strong></p>
+                  <p>52-Week High: <strong>$51.38</strong></p>
+                  <p>50-Day MA: <strong>$46.22</strong></p>
+                  <p>200-Day MA: <strong>$42.11</strong></p>
+                </div>
+                <div class="detail-block news-block">
+                  <h4>📊 Analyst Rating</h4>
+                  <p>Consensus: <strong>Buy 🟢</strong></p>
+                  <p>Recommendation: <strong>2.2/5.0 (22 analysts) · Target $50.54</strong></p>
+                  
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        
+        <tr class="data-row" data-ticker="DUK" onclick="toggleDetail('DUK')">
+          <td class="ticker-cell">
+            <span class="ticker-tag">DUK</span>
+            <span class="asset-badge asset-stock">Stock</span>
+          </td>
+          <td class="name-cell">Duke Energy Corporation</td>
+          <td>Utilities</td>
+          <td class="score-cell">
+            <div class="score-bar-wrap">
+              <div class="score-bar" style="width:37.7%; background:#6b7280"></div>
+              <span class="score-num">37.7</span>
+            </div>
+          </td>
+          <td><span class="tier-badge tier-hold">⏳ Hold</span></td>
+          <td class="num">3.28%</td>
+          <td class="num">19 yrs</td>
+          <td class="num">-3.0%</td>
+          <td class="num">3.9%</td>
+          <td class="num">18.1</td>
+          <td class="num">22.57</td>
+          <td>Buy 🟢</td>
+        </tr>
+        <tr class="detail-row" id="detail-DUK" style="display:none">
+          <td colspan="12">
+            <div class="detail-panel">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>📊 Score Breakdown</h4>
+                  
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs 52W High</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:29.6%"></div>
+          </div>
+          <span class="breakdown-val">30</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs MA-50</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:0.0%"></div>
+          </div>
+          <span class="breakdown-val">0</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Yield Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:59.3%"></div>
+          </div>
+          <span class="breakdown-val">59</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">P/E Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:39.6%"></div>
+          </div>
+          <span class="breakdown-val">40</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Sentiment</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:70%"></div>
+          </div>
+          <span class="breakdown-val">70</span>
+        </div>
+                </div>
+                <div class="detail-block">
+                  <h4>💰 Dividend Details</h4>
+                  <p>Current Yield: <strong>3.28%</strong></p>
+                  <p>Growth/Hold Streak: <strong>19 yrs</strong> (no cuts)</p>
+                  <p>Payout Ratio: <strong>66.9%</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📈 Valuation</h4>
+                  <p>Forward P/E: <strong>18.1</strong></p>
+                  <p>Trailing P/E: <strong>20.53</strong></p>
+                  <p>Avg Historical P/E: <strong>22.57</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📉 Price Action</h4>
+                  <p>Current: <strong>$129.51</strong></p>
+                  <p>52-Week High: <strong>$133.46</strong></p>
+                  <p>50-Day MA: <strong>$124.61</strong></p>
+                  <p>200-Day MA: <strong>$120.24</strong></p>
+                </div>
+                <div class="detail-block news-block">
+                  <h4>📊 Analyst Rating</h4>
+                  <p>Consensus: <strong>Buy 🟢</strong></p>
+                  <p>Recommendation: <strong>2.3/5.0 (17 analysts) · Target $138.12</strong></p>
+                  
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        
+        <tr class="data-row" data-ticker="CVX" onclick="toggleDetail('CVX')">
+          <td class="ticker-cell">
+            <span class="ticker-tag">CVX</span>
+            <span class="asset-badge asset-stock">Stock</span>
+          </td>
+          <td class="name-cell">Chevron Corporation</td>
+          <td>Energy</td>
+          <td class="score-cell">
+            <div class="score-bar-wrap">
+              <div class="score-bar" style="width:36.8%; background:#6b7280"></div>
+              <span class="score-num">36.8</span>
+            </div>
+          </td>
+          <td><span class="tier-badge tier-hold">⏳ Hold</span></td>
+          <td class="num">3.53%</td>
+          <td class="num">41 yrs</td>
+          <td class="num">0.0%</td>
+          <td class="num">12.6%</td>
+          <td class="num">21.48</td>
+          <td class="num">15.79</td>
+          <td>Buy 🟢</td>
+        </tr>
+        <tr class="detail-row" id="detail-CVX" style="display:none">
+          <td colspan="12">
+            <div class="detail-panel">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>📊 Score Breakdown</h4>
+                  
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs 52W High</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:0.0%"></div>
+          </div>
+          <span class="breakdown-val">0</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs MA-50</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:0.0%"></div>
+          </div>
+          <span class="breakdown-val">0</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Yield Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:67.7%"></div>
+          </div>
+          <span class="breakdown-val">68</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">P/E Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:64.0%"></div>
+          </div>
+          <span class="breakdown-val">64</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Sentiment</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:70%"></div>
+          </div>
+          <span class="breakdown-val">70</span>
+        </div>
+                </div>
+                <div class="detail-block">
+                  <h4>💰 Dividend Details</h4>
+                  <p>Current Yield: <strong>3.53%</strong></p>
+                  <p>Growth/Hold Streak: <strong>41 yrs</strong> (no cuts)</p>
+                  <p>Payout Ratio: <strong>103.2%</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📈 Valuation</h4>
+                  <p>Forward P/E: <strong>21.48</strong></p>
+                  <p>Trailing P/E: <strong>30.54</strong></p>
+                  <p>Avg Historical P/E: <strong>15.79</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📉 Price Action</h4>
+                  <p>Current: <strong>$202.51</strong></p>
+                  <p>52-Week High: <strong>$202.51</strong></p>
+                  <p>50-Day MA: <strong>$179.91</strong></p>
+                  <p>200-Day MA: <strong>$156.89</strong></p>
+                </div>
+                <div class="detail-block news-block">
+                  <h4>📊 Analyst Rating</h4>
+                  <p>Consensus: <strong>Buy 🟢</strong></p>
+                  <p>Recommendation: <strong>2.0/5.0 (24 analysts) · Target $192.29</strong></p>
+                  
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        
+        <tr class="data-row" data-ticker="SO" onclick="toggleDetail('SO')">
+          <td class="ticker-cell">
+            <span class="ticker-tag">SO</span>
+            <span class="asset-badge asset-stock">Stock</span>
+          </td>
+          <td class="name-cell">The Southern Company</td>
+          <td>Utilities</td>
+          <td class="score-cell">
+            <div class="score-bar-wrap">
+              <div class="score-bar" style="width:31.7%; background:#6b7280"></div>
+              <span class="score-num">31.7</span>
+            </div>
+          </td>
+          <td><span class="tier-badge tier-hold">⏳ Hold</span></td>
+          <td class="num">3.08%</td>
+          <td class="num">43 yrs</td>
+          <td class="num">-3.7%</td>
+          <td class="num">3.5%</td>
+          <td class="num">19.43</td>
+          <td class="num">20.17</td>
+          <td>Buy 🟢</td>
+        </tr>
+        <tr class="detail-row" id="detail-SO" style="display:none">
+          <td colspan="12">
+            <div class="detail-panel">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>📊 Score Breakdown</h4>
+                  
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs 52W High</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:36.9%"></div>
+          </div>
+          <span class="breakdown-val">37</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs MA-50</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:0.0%"></div>
+          </div>
+          <span class="breakdown-val">0</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Yield Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:52.7%"></div>
+          </div>
+          <span class="breakdown-val">53</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">P/E Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:7.3%"></div>
+          </div>
+          <span class="breakdown-val">7</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Sentiment</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:70%"></div>
+          </div>
+          <span class="breakdown-val">70</span>
+        </div>
+                </div>
+                <div class="detail-block">
+                  <h4>💰 Dividend Details</h4>
+                  <p>Current Yield: <strong>3.08%</strong></p>
+                  <p>Growth/Hold Streak: <strong>43 yrs</strong> (no cuts)</p>
+                  <p>Payout Ratio: <strong>75.0%</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📈 Valuation</h4>
+                  <p>Forward P/E: <strong>19.43</strong></p>
+                  <p>Trailing P/E: <strong>24.35</strong></p>
+                  <p>Avg Historical P/E: <strong>20.17</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📉 Price Action</h4>
+                  <p>Current: <strong>$95.45</strong></p>
+                  <p>52-Week High: <strong>$99.11</strong></p>
+                  <p>50-Day MA: <strong>$92.24</strong></p>
+                  <p>200-Day MA: <strong>$90.8</strong></p>
+                </div>
+                <div class="detail-block news-block">
+                  <h4>📊 Analyst Rating</h4>
+                  <p>Consensus: <strong>Buy 🟢</strong></p>
+                  <p>Recommendation: <strong>2.5/5.0 (19 analysts) · Target $101.08</strong></p>
+                  
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        
+        <tr class="data-row" data-ticker="WEC" onclick="toggleDetail('WEC')">
+          <td class="ticker-cell">
+            <span class="ticker-tag">WEC</span>
+            <span class="asset-badge asset-stock">Stock</span>
+          </td>
+          <td class="name-cell">WEC Energy Group, Inc.</td>
+          <td>Utilities</td>
+          <td class="score-cell">
+            <div class="score-bar-wrap">
+              <div class="score-bar" style="width:30.8%; background:#6b7280"></div>
+              <span class="score-num">30.8</span>
+            </div>
+          </td>
+          <td><span class="tier-badge tier-hold">⏳ Hold</span></td>
+          <td class="num">3.29%</td>
+          <td class="num">24 yrs</td>
+          <td class="num">-2.6%</td>
+          <td class="num">2.3%</td>
+          <td class="num">19.12</td>
+          <td class="num">20.05</td>
+          <td>Buy 🟢</td>
+        </tr>
+        <tr class="detail-row" id="detail-WEC" style="display:none">
+          <td colspan="12">
+            <div class="detail-panel">
+              <div class="detail-grid">
+                <div class="detail-block">
+                  <h4>📊 Score Breakdown</h4>
+                  
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs 52W High</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:26.1%"></div>
+          </div>
+          <span class="breakdown-val">26</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">vs MA-50</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:0.0%"></div>
+          </div>
+          <span class="breakdown-val">0</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Yield Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:59.7%"></div>
+          </div>
+          <span class="breakdown-val">60</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">P/E Signal</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:9.3%"></div>
+          </div>
+          <span class="breakdown-val">9</span>
+        </div>
+        <div class="breakdown-item">
+          <span class="breakdown-label">Sentiment</span>
+          <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar" style="width:70%"></div>
+          </div>
+          <span class="breakdown-val">70</span>
+        </div>
+                </div>
+                <div class="detail-block">
+                  <h4>💰 Dividend Details</h4>
+                  <p>Current Yield: <strong>3.29%</strong></p>
+                  <p>Growth/Hold Streak: <strong>24 yrs</strong> (no cuts)</p>
+                  <p>Payout Ratio: <strong>74.2%</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📈 Valuation</h4>
+                  <p>Forward P/E: <strong>19.12</strong></p>
+                  <p>Trailing P/E: <strong>23.87</strong></p>
+                  <p>Avg Historical P/E: <strong>20.05</strong></p>
+                </div>
+                <div class="detail-block">
+                  <h4>📉 Price Action</h4>
+                  <p>Current: <strong>$114.82</strong></p>
+                  <p>52-Week High: <strong>$117.9</strong></p>
+                  <p>50-Day MA: <strong>$112.26</strong></p>
+                  <p>200-Day MA: <strong>$108.33</strong></p>
+                </div>
+                <div class="detail-block news-block">
+                  <h4>📊 Analyst Rating</h4>
+                  <p>Consensus: <strong>Buy 🟢</strong></p>
+                  <p>Recommendation: <strong>2.3/5.0 (17 analysts) · Target $123.03</strong></p>
+                  
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        
+    </tbody>
+  </table>
+  <div class="empty" id="empty-state" style="display:none">
+    <h3>No results match your filters</h3>
+    <p>Try lowering the minimum score or yield threshold.</p>
+  </div>
+</div>
+
+<div class="config-bar">
+  <span>Config: <strong>Min Yield 3.0%</strong></span>
+  <span>Alert Threshold: <strong>Score ≥ 65</strong></span>
+  <span>Min Streak: <strong>5 years</strong></span>
+  <span>Data: <strong>yfinance + NewsAPI + Finviz</strong></span>
+</div>
+
+<script>
+const ALL_DATA = [
+  {
+    "ticker": "CLX",
+    "name": "The Clorox Company",
+    "sector": "Consumer Defensive",
+    "asset_type": "Stock",
+    "current_price": 106.9,
+    "high_52w": 142.83,
+    "ma_50": 115.45,
+    "ma_200": 114.6,
+    "drop_from_52w": -25.16,
+    "drop_from_ma50": -7.41,
+    "div_yield": 4.65,
+    "forward_pe": 15.68,
+    "trailing_pe": 17.5,
+    "market_cap": 13039580160,
+    "dividend_streak": 38,
+    "avg_payout_ratio": 80.5,
+    "avg_historical_pe": 61.08,
+    "sentiment_label": "Hold \ud83d\udfe1",
+    "sentiment_score": 50,
+    "news_headlines": [],
+    "analyst_recommendation": "3.1/5.0 (17 analysts) \u00b7 Target $123.47",
+    "opportunity_score": 91.0,
+    "score_components": {
+      "drop_52w": 100,
+      "drop_ma50": 92.6,
+      "yield_signal": 100,
+      "pe_signal": 100,
+      "sentiment": 50
+    },
+    "tier": "Strong Buy",
+    "tier_class": "tier-strong"
+  },
+  {
+    "ticker": "GPC",
+    "name": "Genuine Parts Company",
+    "sector": "Consumer Cyclical",
+    "asset_type": "Stock",
+    "current_price": 98.54,
+    "high_52w": 147.91,
+    "ma_50": 125.64,
+    "ma_200": 127.35,
+    "drop_from_52w": -33.38,
+    "drop_from_ma50": -21.58,
+    "div_yield": 4.29,
+    "forward_pe": 11.51,
+    "trailing_pe": 209.65,
+    "market_cap": 13708397568,
+    "dividend_streak": 39,
+    "avg_payout_ratio": 876.6,
+    "avg_historical_pe": 17.6,
+    "sentiment_label": "Buy \ud83d\udfe2",
+    "sentiment_score": 30,
+    "news_headlines": [],
+    "analyst_recommendation": "2.3/5.0 (8 analysts) \u00b7 Target $140.38",
+    "opportunity_score": 87.9,
+    "score_components": {
+      "drop_52w": 100,
+      "drop_ma50": 100,
+      "yield_signal": 93.0,
+      "pe_signal": 69.2,
+      "sentiment": 70
+    },
+    "tier": "Strong Buy",
+    "tier_class": "tier-strong"
+  },
+  {
+    "ticker": "ARCC",
+    "name": "Ares Capital Corporation",
+    "sector": "Financial Services",
+    "asset_type": "Stock",
+    "current_price": 18.07,
+    "high_52w": 21.64,
+    "ma_50": 19.01,
+    "ma_200": 19.77,
+    "drop_from_52w": -16.48,
+    "drop_from_ma50": -4.96,
+    "div_yield": 10.56,
+    "forward_pe": 9.39,
+    "trailing_pe": 9.72,
+    "market_cap": 12974672896,
+    "dividend_streak": 5,
+    "avg_payout_ratio": 103.2,
+    "avg_historical_pe": 9.08,
+    "sentiment_label": "Buy \ud83d\udfe2",
+    "sentiment_score": 30,
+    "news_headlines": [],
+    "analyst_recommendation": "1.6/5.0 (13 analysts) \u00b7 Target $21.88",
+    "opportunity_score": 87.2,
+    "score_components": {
+      "drop_52w": 100,
+      "drop_ma50": 62.0,
+      "yield_signal": 100,
+      "pe_signal": 96.6,
+      "sentiment": 70
+    },
+    "tier": "Strong Buy",
+    "tier_class": "tier-strong"
+  },
+  {
+    "ticker": "WMT",
+    "name": "Walmart Inc.",
+    "sector": "Consumer Defensive",
+    "asset_type": "Stock",
+    "current_price": 119.82,
+    "high_52w": 133.89,
+    "ma_50": 123.58,
+    "ma_200": 107.87,
+    "drop_from_52w": -10.51,
+    "drop_from_ma50": -3.04,
+    "div_yield": 82.0,
+    "forward_pe": 36.49,
+    "trailing_pe": 44.05,
+    "market_cap": 955293106176,
+    "dividend_streak": 43,
+    "avg_payout_ratio": 34.4,
+    "avg_historical_pe": 36.04,
+    "sentiment_label": "Strong Buy \ud83d\udfe2",
+    "sentiment_score": 15,
+    "news_headlines": [],
+    "analyst_recommendation": "1.4/5.0 (41 analysts) \u00b7 Target $136.02",
+    "opportunity_score": 85.1,
+    "score_components": {
+      "drop_52w": 100,
+      "drop_ma50": 38.0,
+      "yield_signal": 100,
+      "pe_signal": 98.8,
+      "sentiment": 85
+    },
+    "tier": "Strong Buy",
+    "tier_class": "tier-strong"
+  },
+  {
+    "ticker": "VICI",
+    "name": "VICI Properties Inc.",
+    "sector": "Real Estate",
+    "asset_type": "Stock",
+    "current_price": 27.64,
+    "high_52w": 32.93,
+    "ma_50": 28.91,
+    "ma_200": 30.22,
+    "drop_from_52w": -16.08,
+    "drop_from_ma50": -4.41,
+    "div_yield": 6.37,
+    "forward_pe": 9.45,
+    "trailing_pe": 10.59,
+    "market_cap": 29536602112,
+    "dividend_streak": 7,
+    "avg_payout_ratio": 67.6,
+    "avg_historical_pe": 14.2,
+    "sentiment_label": "Buy \ud83d\udfe2",
+    "sentiment_score": 30,
+    "news_headlines": [],
+    "analyst_recommendation": "1.8/5.0 (23 analysts) \u00b7 Target $34.78",
+    "opportunity_score": 79.9,
+    "score_components": {
+      "drop_52w": 100,
+      "drop_ma50": 55.1,
+      "yield_signal": 100,
+      "pe_signal": 66.9,
+      "sentiment": 70
+    },
+    "tier": "Strong Buy",
+    "tier_class": "tier-strong"
+  },
+  {
+    "ticker": "MAIN",
+    "name": "Main Street Capital Corporation",
+    "sector": "Financial Services",
+    "asset_type": "Stock",
+    "current_price": 54.98,
+    "high_52w": 64.94,
+    "ma_50": 59.53,
+    "ma_200": 59.39,
+    "drop_from_52w": -15.33,
+    "drop_from_ma50": -7.65,
+    "div_yield": 5.6,
+    "forward_pe": 13.46,
+    "trailing_pe": 9.96,
+    "market_cap": 4953963520,
+    "dividend_streak": 5,
+    "avg_payout_ratio": 76.8,
+    "avg_historical_pe": 8.44,
+    "sentiment_label": "Hold \ud83d\udfe1",
+    "sentiment_score": 50,
+    "news_headlines": [],
+    "analyst_recommendation": "2.7/5.0 (6 analysts) \u00b7 Target $63.83",
+    "opportunity_score": 79.7,
+    "score_components": {
+      "drop_52w": 100,
+      "drop_ma50": 95.6,
+      "yield_signal": 100,
+      "pe_signal": 40.5,
+      "sentiment": 50
+    },
+    "tier": "Strong Buy",
+    "tier_class": "tier-strong"
+  },
+  {
+    "ticker": "ADP",
+    "name": "Automatic Data Processing, Inc.",
+    "sector": "Technology",
+    "asset_type": "Stock",
+    "current_price": 211.85,
+    "high_52w": 318.79,
+    "ma_50": 228.85,
+    "ma_200": 268.32,
+    "drop_from_52w": -33.55,
+    "drop_from_ma50": -7.43,
+    "div_yield": 3.23,
+    "forward_pe": 17.71,
+    "trailing_pe": 20.35,
+    "market_cap": 85682470912,
+    "dividend_streak": 23,
+    "avg_payout_ratio": 60.7,
+    "avg_historical_pe": 30.06,
+    "sentiment_label": "Hold \ud83d\udfe1",
+    "sentiment_score": 50,
+    "news_headlines": [],
+    "analyst_recommendation": "3.1/5.0 (14 analysts) \u00b7 Target $272.00",
+    "opportunity_score": 79.0,
+    "score_components": {
+      "drop_52w": 100,
+      "drop_ma50": 92.9,
+      "yield_signal": 57.7,
+      "pe_signal": 82.2,
+      "sentiment": 50
+    },
+    "tier": "Strong Buy",
+    "tier_class": "tier-strong"
+  },
+  {
+    "ticker": "ES",
+    "name": "Eversource Energy",
+    "sector": "Utilities",
+    "asset_type": "Stock",
+    "current_price": 68.18,
+    "high_52w": 75.41,
+    "ma_50": 70.81,
+    "ma_200": 66.97,
+    "drop_from_52w": -9.59,
+    "drop_from_ma50": -3.72,
+    "div_yield": 4.52,
+    "forward_pe": 13.18,
+    "trailing_pe": 14.95,
+    "market_cap": 25601359872,
+    "dividend_streak": 26,
+    "avg_payout_ratio": 66.0,
+    "avg_historical_pe": 19.62,
+    "sentiment_label": "Buy \ud83d\udfe2",
+    "sentiment_score": 30,
+    "news_headlines": [],
+    "analyst_recommendation": "2.4/5.0 (13 analysts) \u00b7 Target $75.62",
+    "opportunity_score": 76.9,
+    "score_components": {
+      "drop_52w": 95.9,
+      "drop_ma50": 46.5,
+      "yield_signal": 100,
+      "pe_signal": 65.6,
+      "sentiment": 70
+    },
+    "tier": "Strong Buy",
+    "tier_class": "tier-strong"
+  },
+  {
+    "ticker": "CCI",
+    "name": "Crown Castle Inc.",
+    "sector": "Real Estate",
+    "asset_type": "Stock",
+    "current_price": 84.55,
+    "high_52w": 109.95,
+    "ma_50": 86.03,
+    "ma_200": 92.02,
+    "drop_from_52w": -23.1,
+    "drop_from_ma50": -1.72,
+    "div_yield": 5.0,
+    "forward_pe": 28.62,
+    "trailing_pe": 33.55,
+    "market_cap": 36869971968,
+    "dividend_streak": 0,
+    "avg_payout_ratio": 188.6,
+    "avg_historical_pe": 48.02,
+    "sentiment_label": "Buy \ud83d\udfe2",
+    "sentiment_score": 30,
+    "news_headlines": [],
+    "analyst_recommendation": "1.9/5.0 (19 analysts) \u00b7 Target $99.07",
+    "opportunity_score": 76.0,
+    "score_components": {
+      "drop_52w": 100,
+      "drop_ma50": 21.5,
+      "yield_signal": 100,
+      "pe_signal": 80.8,
+      "sentiment": 70
+    },
+    "tier": "Strong Buy",
+    "tier_class": "tier-strong"
+  },
+  {
+    "ticker": "PM",
+    "name": "Philip Morris International Inc.",
+    "sector": "Consumer Defensive",
+    "asset_type": "Stock",
+    "current_price": 163.01,
+    "high_52w": 189.8,
+    "ma_50": 176.41,
+    "ma_200": 165.25,
+    "drop_from_52w": -14.12,
+    "drop_from_ma50": -7.6,
+    "div_yield": 3.6,
+    "forward_pe": 17.72,
+    "trailing_pe": 22.42,
+    "market_cap": 253746561024,
+    "dividend_streak": 13,
+    "avg_payout_ratio": 77.6,
+    "avg_historical_pe": 19.63,
+    "sentiment_label": "Buy \ud83d\udfe2",
+    "sentiment_score": 30,
+    "news_headlines": [],
+    "analyst_recommendation": "1.8/5.0 (16 analysts) \u00b7 Target $194.84",
+    "opportunity_score": 72.4,
+    "score_components": {
+      "drop_52w": 100,
+      "drop_ma50": 95.0,
+      "yield_signal": 70.0,
+      "pe_signal": 19.5,
+      "sentiment": 70
+    },
+    "tier": "Strong Buy",
+    "tier_class": "tier-strong"
+  },
+  {
+    "ticker": "GBDC",
+    "name": "Golub Capital BDC, Inc.",
+    "sector": "Financial Services",
+    "asset_type": "Stock",
+    "current_price": 12.52,
+    "high_52w": 14.26,
+    "ma_50": 12.5,
+    "ma_200": 13.18,
+    "drop_from_52w": -12.23,
+    "drop_from_ma50": 0.13,
+    "div_yield": 11.95,
+    "forward_pe": 9.66,
+    "trailing_pe": 10.01,
+    "market_cap": 3294300672,
+    "dividend_streak": 0,
+    "avg_payout_ratio": 124.8,
+    "avg_historical_pe": 9.27,
+    "sentiment_score": 50,
+    "news_headlines": [],
+    "sentiment_label": "\u2014 no key",
+    "opportunity_score": 71.7,
+    "score_components": {
+      "drop_52w": 100,
+      "drop_ma50": 0.0,
+      "yield_signal": 100,
+      "pe_signal": 95.8,
+      "sentiment": 50
+    },
+    "tier": "Strong Buy",
+    "tier_class": "tier-strong"
+  },
+  {
+    "ticker": "MO",
+    "name": "Altria Group, Inc.",
+    "sector": "Consumer Defensive",
+    "asset_type": "Stock",
+    "current_price": 64.7,
+    "high_52w": 69.7,
+    "ma_50": 64.9,
+    "ma_200": 61.11,
+    "drop_from_52w": -7.17,
+    "drop_from_ma50": -0.31,
+    "div_yield": 6.52,
+    "forward_pe": 11.14,
+    "trailing_pe": 15.7,
+    "market_cap": 108610052096,
+    "dividend_streak": 16,
+    "avg_payout_ratio": 101.0,
+    "avg_historical_pe": 10.97,
+    "sentiment_label": "Buy \ud83d\udfe2",
+    "sentiment_score": 30,
+    "news_headlines": [],
+    "analyst_recommendation": "2.5/5.0 (12 analysts) \u00b7 Target $65.50",
+    "opportunity_score": 68.9,
+    "score_components": {
+      "drop_52w": 71.7,
+      "drop_ma50": 3.9,
+      "yield_signal": 100,
+      "pe_signal": 98.5,
+      "sentiment": 70
+    },
+    "tier": "Watch List",
+    "tier_class": "tier-watch"
+  },
+  {
+    "ticker": "AMT",
+    "name": "American Tower Corporation",
+    "sector": "Real Estate",
+    "asset_type": "Stock",
+    "current_price": 181.3,
+    "high_52w": 228.1,
+    "ma_50": 181.77,
+    "ma_200": 191.18,
+    "drop_from_52w": -20.52,
+    "drop_from_ma50": -0.26,
+    "div_yield": 3.77,
+    "forward_pe": 26.24,
+    "trailing_pe": 33.64,
+    "market_cap": 84876853248,
+    "dividend_streak": 14,
+    "avg_payout_ratio": 125.9,
+    "avg_historical_pe": 45.51,
+    "sentiment_label": "Buy \ud83d\udfe2",
+    "sentiment_score": 30,
+    "news_headlines": [],
+    "analyst_recommendation": "1.9/5.0 (21 analysts) \u00b7 Target $216.52",
+    "opportunity_score": 68.2,
+    "score_components": {
+      "drop_52w": 100,
+      "drop_ma50": 3.2,
+      "yield_signal": 75.7,
+      "pe_signal": 84.7,
+      "sentiment": 70
+    },
+    "tier": "Watch List",
+    "tier_class": "tier-watch"
+  },
+  {
+    "ticker": "STAG",
+    "name": "STAG Industrial, Inc.",
+    "sector": "Real Estate",
+    "asset_type": "Stock",
+    "current_price": 36.73,
+    "high_52w": 39.73,
+    "ma_50": 38.21,
+    "ma_200": 36.79,
+    "drop_from_52w": -7.55,
+    "drop_from_ma50": -3.87,
+    "div_yield": 4.13,
+    "forward_pe": 41.74,
+    "trailing_pe": 25.16,
+    "market_cap": 7163659776,
+    "dividend_streak": 14,
+    "avg_payout_ratio": 102.1,
+    "avg_historical_pe": 30.53,
+    "sentiment_label": "Hold \ud83d\udfe1",
+    "sentiment_score": 50,
+    "news_headlines": [],
+    "analyst_recommendation": "2.5/5.0 (11 analysts) \u00b7 Target $41.55",
+    "opportunity_score": 66.2,
+    "score_components": {
+      "drop_52w": 75.5,
+      "drop_ma50": 48.4,
+      "yield_signal": 87.7,
+      "pe_signal": 63.3,
+      "sentiment": 50
+    },
+    "tier": "Watch List",
+    "tier_class": "tier-watch"
+  },
+  {
+    "ticker": "NNN",
+    "name": "NNN REIT, Inc.",
+    "sector": "Real Estate",
+    "asset_type": "Stock",
+    "current_price": 43.44,
+    "high_52w": 45.83,
+    "ma_50": 43.31,
+    "ma_200": 41.27,
+    "drop_from_52w": -5.21,
+    "drop_from_ma50": 0.3,
+    "div_yield": 5.43,
+    "forward_pe": 20.48,
+    "trailing_pe": 20.99,
+    "market_cap": 8250969088,
+    "dividend_streak": 35,
+    "avg_payout_ratio": 114.0,
+    "avg_historical_pe": 19.41,
+    "sentiment_label": "Hold \ud83d\udfe1",
+    "sentiment_score": 50,
+    "news_headlines": [],
+    "analyst_recommendation": "2.9/5.0 (15 analysts) \u00b7 Target $45.23",
+    "opportunity_score": 59.4,
+    "score_components": {
+      "drop_52w": 52.1,
+      "drop_ma50": 0.0,
+      "yield_signal": 100,
+      "pe_signal": 94.5,
+      "sentiment": 50
+    },
+    "tier": "Watch List",
+    "tier_class": "tier-watch"
+  },
+  {
+    "ticker": "PFFD",
+    "name": "Global X U.S. Preferred ETF",
+    "sector": "Preferred Stock",
+    "asset_type": "ETF",
+    "current_price": 18.48,
+    "high_52w": 19.4,
+    "ma_50": 19.12,
+    "ma_200": 18.72,
+    "drop_from_52w": -4.76,
+    "drop_from_ma50": -3.37,
+    "div_yield": 6.25,
+    "forward_pe": null,
+    "trailing_pe": null,
+    "market_cap": null,
+    "dividend_streak": 0,
+    "avg_payout_ratio": null,
+    "sentiment_score": 50,
+    "news_headlines": [],
+    "sentiment_label": "\u2014 no key",
+    "opportunity_score": 57.8,
+    "score_components": {
+      "drop_52w": 47.6,
+      "drop_ma50": 42.1,
+      "yield_signal": 100,
+      "pe_signal": 50,
+      "sentiment": 50
+    },
+    "tier": "Watch List",
+    "tier_class": "tier-watch"
+  },
+  {
+    "ticker": "DVY",
+    "name": "iShares Select Dividend ETF",
+    "sector": "Mid-Cap Value",
+    "asset_type": "ETF",
+    "current_price": 147.37,
+    "high_52w": 156.73,
+    "ma_50": 150.78,
+    "ma_200": 139.61,
+    "drop_from_52w": -5.97,
+    "drop_from_ma50": -2.26,
+    "div_yield": 3.29,
+    "forward_pe": 16.26,
+    "trailing_pe": 16.26,
+    "market_cap": 25797117952,
+    "dividend_streak": 5,
+    "avg_payout_ratio": null,
+    "sentiment_score": 50,
+    "news_headlines": [],
+    "sentiment_label": "\u2014 no key",
+    "opportunity_score": 50.0,
+    "score_components": {
+      "drop_52w": 59.7,
+      "drop_ma50": 28.2,
+      "yield_signal": 59.7,
+      "pe_signal": 50,
+      "sentiment": 50
+    },
+    "tier": "Watch List",
+    "tier_class": "tier-watch"
+  },
+  {
+    "ticker": "TGT",
+    "name": "Target Corporation",
+    "sector": "Consumer Defensive",
+    "asset_type": "Stock",
+    "current_price": 113.5,
+    "high_52w": 120.8,
+    "ma_50": 112.36,
+    "ma_200": 98.23,
+    "drop_from_52w": -6.04,
+    "drop_from_ma50": 1.02,
+    "div_yield": 3.98,
+    "forward_pe": 13.34,
+    "trailing_pe": 13.96,
+    "market_cap": 51401371648,
+    "dividend_streak": 42,
+    "avg_payout_ratio": 55.6,
+    "avg_historical_pe": 17.12,
+    "sentiment_label": "Hold \ud83d\udfe1",
+    "sentiment_score": 50,
+    "news_headlines": [],
+    "analyst_recommendation": "2.6/5.0 (32 analysts) \u00b7 Target $124.88",
+    "opportunity_score": 48.0,
+    "score_components": {
+      "drop_52w": 60.4,
+      "drop_ma50": 0.0,
+      "yield_signal": 82.7,
+      "pe_signal": 44.2,
+      "sentiment": 50
+    },
+    "tier": "\u23f3 Hold",
+    "tier_class": "tier-hold"
+  },
+  {
+    "ticker": "SCHD",
+    "name": "Schwab U.S. Dividend Equity ETF",
+    "sector": "Large Value",
+    "asset_type": "ETF",
+    "current_price": 30.49,
+    "high_52w": 31.86,
+    "ma_50": 30.5,
+    "ma_200": 27.71,
+    "drop_from_52w": -4.29,
+    "drop_from_ma50": -0.02,
+    "div_yield": 3.3,
+    "forward_pe": 19.23,
+    "trailing_pe": 19.23,
+    "market_cap": null,
+    "dividend_streak": 14,
+    "avg_payout_ratio": null,
+    "sentiment_score": 50,
+    "news_headlines": [],
+    "sentiment_label": "\u2014 no key",
+    "opportunity_score": 43.0,
+    "score_components": {
+      "drop_52w": 53.6,
+      "drop_ma50": 0.2,
+      "yield_signal": 60.0,
+      "pe_signal": 50,
+      "sentiment": 50
+    },
+    "tier": "\u23f3 Hold",
+    "tier_class": "tier-hold"
+  },
+  {
+    "ticker": "VZ",
+    "name": "Verizon Communications Inc.",
+    "sector": "Communication Services",
+    "asset_type": "Stock",
+    "current_price": 50.03,
+    "high_52w": 51.38,
+    "ma_50": 46.22,
+    "ma_200": 42.11,
+    "drop_from_52w": -2.62,
+    "drop_from_ma50": 8.24,
+    "div_yield": 5.72,
+    "forward_pe": 9.51,
+    "trailing_pe": 12.32,
+    "market_cap": 211031834624,
+    "dividend_streak": 24,
+    "avg_payout_ratio": 50.4,
+    "avg_historical_pe": 10.28,
+    "sentiment_label": "Buy \ud83d\udfe2",
+    "sentiment_score": 30,
+    "news_headlines": [],
+    "analyst_recommendation": "2.2/5.0 (22 analysts) \u00b7 Target $50.54",
+    "opportunity_score": 37.9,
+    "score_components": {
+      "drop_52w": 17.5,
+      "drop_ma50": 0.0,
+      "yield_signal": 100,
+      "pe_signal": 15.0,
+      "sentiment": 70
+    },
+    "tier": "\u23f3 Hold",
+    "tier_class": "tier-hold"
+  },
+  {
+    "ticker": "DUK",
+    "name": "Duke Energy Corporation",
+    "sector": "Utilities",
+    "asset_type": "Stock",
+    "current_price": 129.51,
+    "high_52w": 133.46,
+    "ma_50": 124.61,
+    "ma_200": 120.24,
+    "drop_from_52w": -2.96,
+    "drop_from_ma50": 3.94,
+    "div_yield": 3.28,
+    "forward_pe": 18.1,
+    "trailing_pe": 20.53,
+    "market_cap": 100720041984,
+    "dividend_streak": 19,
+    "avg_payout_ratio": 66.9,
+    "avg_historical_pe": 22.57,
+    "sentiment_label": "Buy \ud83d\udfe2",
+    "sentiment_score": 30,
+    "news_headlines": [],
+    "analyst_recommendation": "2.3/5.0 (17 analysts) \u00b7 Target $138.12",
+    "opportunity_score": 37.7,
+    "score_components": {
+      "drop_52w": 29.6,
+      "drop_ma50": 0.0,
+      "yield_signal": 59.3,
+      "pe_signal": 39.6,
+      "sentiment": 70
+    },
+    "tier": "\u23f3 Hold",
+    "tier_class": "tier-hold"
+  },
+  {
+    "ticker": "CVX",
+    "name": "Chevron Corporation",
+    "sector": "Energy",
+    "asset_type": "Stock",
+    "current_price": 202.51,
+    "high_52w": 202.51,
+    "ma_50": 179.91,
+    "ma_200": 156.89,
+    "drop_from_52w": 0.0,
+    "drop_from_ma50": 12.56,
+    "div_yield": 3.53,
+    "forward_pe": 21.48,
+    "trailing_pe": 30.54,
+    "market_cap": 404879114240,
+    "dividend_streak": 41,
+    "avg_payout_ratio": 103.2,
+    "avg_historical_pe": 15.79,
+    "sentiment_label": "Buy \ud83d\udfe2",
+    "sentiment_score": 30,
+    "news_headlines": [],
+    "analyst_recommendation": "2.0/5.0 (24 analysts) \u00b7 Target $192.29",
+    "opportunity_score": 36.8,
+    "score_components": {
+      "drop_52w": 0.0,
+      "drop_ma50": 0.0,
+      "yield_signal": 67.7,
+      "pe_signal": 64.0,
+      "sentiment": 70
+    },
+    "tier": "\u23f3 Hold",
+    "tier_class": "tier-hold"
+  },
+  {
+    "ticker": "SO",
+    "name": "The Southern Company",
+    "sector": "Utilities",
+    "asset_type": "Stock",
+    "current_price": 95.45,
+    "high_52w": 99.11,
+    "ma_50": 92.24,
+    "ma_200": 90.8,
+    "drop_from_52w": -3.69,
+    "drop_from_ma50": 3.48,
+    "div_yield": 3.08,
+    "forward_pe": 19.43,
+    "trailing_pe": 24.35,
+    "market_cap": 106845888512,
+    "dividend_streak": 43,
+    "avg_payout_ratio": 75.0,
+    "avg_historical_pe": 20.17,
+    "sentiment_label": "Buy \ud83d\udfe2",
+    "sentiment_score": 30,
+    "news_headlines": [],
+    "analyst_recommendation": "2.5/5.0 (19 analysts) \u00b7 Target $101.08",
+    "opportunity_score": 31.7,
+    "score_components": {
+      "drop_52w": 36.9,
+      "drop_ma50": 0.0,
+      "yield_signal": 52.7,
+      "pe_signal": 7.3,
+      "sentiment": 70
+    },
+    "tier": "\u23f3 Hold",
+    "tier_class": "tier-hold"
+  },
+  {
+    "ticker": "WEC",
+    "name": "WEC Energy Group, Inc.",
+    "sector": "Utilities",
+    "asset_type": "Stock",
+    "current_price": 114.82,
+    "high_52w": 117.9,
+    "ma_50": 112.26,
+    "ma_200": 108.33,
+    "drop_from_52w": -2.61,
+    "drop_from_ma50": 2.29,
+    "div_yield": 3.29,
+    "forward_pe": 19.12,
+    "trailing_pe": 23.87,
+    "market_cap": 37379137536,
+    "dividend_streak": 24,
+    "avg_payout_ratio": 74.2,
+    "avg_historical_pe": 20.05,
+    "sentiment_label": "Buy \ud83d\udfe2",
+    "sentiment_score": 30,
+    "news_headlines": [],
+    "analyst_recommendation": "2.3/5.0 (17 analysts) \u00b7 Target $123.03",
+    "opportunity_score": 30.8,
+    "score_components": {
+      "drop_52w": 26.1,
+      "drop_ma50": 0.0,
+      "yield_signal": 59.7,
+      "pe_signal": 9.3,
+      "sentiment": 70
+    },
+    "tier": "\u23f3 Hold",
+    "tier_class": "tier-hold"
+  }
+];
+
+function toggleDetail(ticker) {
+  const row = document.getElementById('detail-' + ticker);
+  row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
+}
+
+function applyFilters() {
+  const minScore = parseFloat(document.getElementById('filter-score').value) || 0;
+  const minYield = parseFloat(document.getElementById('filter-yield').value) || 0;
+  const minStreak = parseInt(document.getElementById('filter-streak').value) || 0;
+  const typeFilter = document.getElementById('filter-type').value;
+  const sortCol = document.getElementById('sort-col').value;
+
+  let filtered = ALL_DATA.filter(r => {
+    if ((r.opportunity_score || 0) < minScore) return false;
+    if ((r.div_yield || 0) < minYield) return false;
+    if ((r.dividend_streak || 0) < minStreak) return false;
+    if (typeFilter && r.asset_type !== typeFilter) return false;
+    return true;
+  });
+
+  filtered.sort((a, b) => (b[sortCol] || 0) - (a[sortCol] || 0));
+
+  const tbody = document.getElementById('table-body');
+  const rows = tbody.querySelectorAll('.data-row, .detail-row');
+  rows.forEach(r => r.style.display = 'none');
+
+  filtered.forEach(r => {
+    const dataRow = tbody.querySelector(`tr[data-ticker="${r.ticker}"]`);
+    if (dataRow) dataRow.style.display = '';
+  });
+
+  document.getElementById('empty-state').style.display = filtered.length === 0 ? 'block' : 'none';
+
+  // Update stats
+  const signals = filtered.filter(r => (r.opportunity_score || 0) >= 70).length;
+  const watching = filtered.filter(r => (r.opportunity_score || 0) >= 50 && (r.opportunity_score || 0) < 70).length;
+  document.getElementById('stat-screened').textContent = filtered.length;
+  document.getElementById('stat-signals').textContent = signals;
+  document.getElementById('stat-watching').textContent = watching;
+}
+
+// Initialize stats on load
+applyFilters();
+</script>
+</body>
+</html>
