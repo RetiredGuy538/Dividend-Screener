@@ -46,10 +46,21 @@ def fetch_yfinance(ticker: str) -> dict:
         drop_from_52w = ((current_price - high_52w) / high_52w) * 100 if high_52w else 0
         drop_from_ma50 = ((current_price - ma_50) / ma_50) * 100 if ma_50 else 0
 
-        div_yield = info.get("dividendYield") or info.get("yield") or 0
-        if div_yield:
-            if div_yield < 1:
-                div_yield *= 100  # convert decimal (0.0292) to percentage (2.92%)
+        # Use trailingAnnualDividendYield as primary source — it is always
+        # a true decimal (0.0077 = 0.77%). Fall back to dividendYield only
+        # if trailing is unavailable. Both are then multiplied by 100.
+        raw_yield = (
+            info.get("trailingAnnualDividendYield") or
+            info.get("dividendYield") or
+            info.get("yield") or
+            0
+        )
+        if raw_yield and raw_yield < 1:
+            div_yield = round(raw_yield * 100, 2)  # 0.0292 → 2.92%
+        elif raw_yield and raw_yield < 25:
+            div_yield = round(raw_yield, 2)         # already a percentage
+        else:
+            div_yield = 0  # bad data or missing
 
         forward_pe = info.get("forwardPE") or info.get("trailingPE") or None
         trailing_pe = info.get("trailingPE") or None
@@ -70,8 +81,8 @@ def fetch_yfinance(ticker: str) -> dict:
             "drop_from_52w": round(drop_from_52w, 2),
             "drop_from_ma50": round(drop_from_ma50, 2),
             "div_yield": round(div_yield, 2),
-            "forward_pe": round(forward_pe, 2) if forward_pe else None,
-            "trailing_pe": round(trailing_pe, 2) if trailing_pe else None,
+            "forward_pe": round(forward_pe, 1) if forward_pe else None,
+            "trailing_pe": round(trailing_pe, 1) if trailing_pe else None,
             "market_cap": market_cap,
         }
     except Exception as e:
@@ -171,7 +182,8 @@ def fetch_historical_pe(ticker: str) -> dict:
                 elif "Basic EPS" in earnings.index:
                     eps = float(earnings.loc["Basic EPS", col])
 
-                if not eps or eps <= 0:
+                import math
+                if not eps or eps <= 0 or math.isnan(eps):
                     continue
 
                 # Find stock price closest to that fiscal year end date
@@ -195,8 +207,22 @@ def fetch_historical_pe(ticker: str) -> dict:
         if not pe_vals:
             return {}
 
+        # Remove statistical outliers before averaging:
+        # If we have 4+ values, drop the highest and lowest
+        # This prevents one anomalous year (COVID spike, write-down, etc.)
+        # from skewing the historical average
+        if len(pe_vals) >= 4:
+            pe_vals = sorted(pe_vals)[1:-1]  # drop min and max
+
+        # Also cap any remaining values at 60 — above that is likely
+        # a one-time earnings distortion, not a true valuation baseline
+        pe_vals = [p for p in pe_vals if p <= 60]
+
+        if not pe_vals:
+            return {}
+
         avg_pe = sum(pe_vals) / len(pe_vals)
-        return {"avg_historical_pe": round(avg_pe, 2)}
+        return {"avg_historical_pe": round(avg_pe, 1)}
 
     except Exception as e:
         print(f"  [historical_pe] Error for {ticker}: {e}")
