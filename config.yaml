@@ -1,0 +1,78 @@
+# ─────────────────────────────────────────────────────────────────
+# Dividend Panic Screener — Configuration
+# ─────────────────────────────────────────────────────────────────
+
+# API keys (or set as environment variables: NEWSAPI_KEY)
+# Get NewsAPI free key at: https://newsapi.org/register
+#   Free tier: 100 requests/day
+#   Used for: sector news sentiment
+# Note: dividend streak and historical P/E are computed from yfinance — no API key needed
+api_keys:
+  newsapi: 9e59c305eddd4e898331cf00aac5cde1
+
+screening:
+  # ── Quality Filters ──────────────────────────────────────────────
+  # Minimum dividend yield to qualify (%)
+  min_yield_pct: 3.0
+
+  # Minimum consecutive years of dividend payments
+  min_dividend_streak_years: 5
+
+  # ── Panic-Selling Signal ─────────────────────────────────────────
+  # Default % drop from 52-week high OR 50-day MA to trigger signal
+  # This can be overridden per ticker below
+  default_drop_threshold_pct: 10
+
+  # ── Your Personal Watchlist ──────────────────────────────────────
+  # These tickers are ALWAYS screened regardless of yield scan
+  watchlist:
+    - VYM       # Vanguard High Dividend Yield ETF
+    - SCHD      # Schwab US Dividend Equity ETF
+    - DVY       # iShares Select Dividend ETF
+    - O         # Realty Income (monthly dividend REIT)
+    - MAIN      # Main Street Capital (BDC)
+    - JNJ       # Johnson & Johnson
+    - KO        # Coca-Cola
+    - PG        # Procter & Gamble
+    - XOM       # Exxon Mobil
+    - T         # AT&T
+    - VZ        # Verizon
+    - ARCC      # Ares Capital (BDC)
+
+  # ── Per-Ticker Drop Threshold Overrides ─────────────────────────
+  # Override the default drop threshold for specific tickers.
+  # Higher-volatility tickers may need a larger drop to be "on sale"
+  ticker_overrides:
+    T:
+      drop_threshold_pct: 15    # AT&T is more volatile; need bigger drop
+    VZ:
+      drop_threshold_pct: 15
+    XOM:
+      drop_threshold_pct: 12
+    ARCC:
+      drop_threshold_pct: 12
+    MAIN:
+      drop_threshold_pct: 12
+    O:
+      drop_threshold_pct: 8     # Realty Income: flag earlier
+    SCHD:
+      drop_threshold_pct: 8
+    VYM:
+      drop_threshold_pct: 8
+
+alerts:
+  # Opportunity score threshold to trigger an email alert (0–100)
+  score_threshold: 65
+
+  # Gmail SMTP settings
+  smtp_host: "smtp.gmail.com"
+  smtp_port: 587
+
+  # Set these as environment variables instead of hardcoding:
+  #   ALERT_EMAIL_FROM    — your Gmail address
+  #   ALERT_EMAIL_PASSWORD — your Gmail App Password
+  #   ALERT_EMAIL_TO      — recipient email
+
+  # OR set them here (not recommended for GitHub — use Secrets instead)
+  from_email: ""
+  to_email: ""
