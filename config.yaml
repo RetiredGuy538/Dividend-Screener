@@ -8,7 +8,7 @@
 #   Used for: sector news sentiment
 # Note: dividend streak and historical P/E are computed from yfinance — no API key needed
 api_keys:
-  newsapi: 9e59c305eddd4e898331cf00aac5cde1
+  newsapi: "YOUR_NEWSAPI_KEY"
 
 screening:
   # ── Quality Filters ──────────────────────────────────────────────
