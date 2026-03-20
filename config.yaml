@@ -2,12 +2,13 @@
 # Dividend Panic Screener — Configuration
 # ─────────────────────────────────────────────────────────────────
 
-# API keys (or set as environment variables: FMP_API_KEY, NEWSAPI_KEY)
-# Get FMP free key at: https://financialmodelingprep.com/developer/docs
+# API keys (or set as environment variables: NEWSAPI_KEY)
 # Get NewsAPI free key at: https://newsapi.org/register
+#   Free tier: 100 requests/day
+#   Used for: sector news sentiment
+# Note: dividend streak and historical P/E are computed from yfinance — no API key needed
 api_keys:
-  fmp: "YOUR_FMP_API_KEY"
-  newsapi: "YOUR_NEWSAPI_KEY"
+  newsapi: 9e59c305eddd4e898331cf00aac5cde1
 
 screening:
   # ── Quality Filters ──────────────────────────────────────────────

@@ -30,7 +30,6 @@ jobs:
 
       - name: Run screener
         env:
-          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
           NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
           ALERT_EMAIL_FROM: ${{ secrets.ALERT_EMAIL_FROM }}
           ALERT_EMAIL_PASSWORD: ${{ secrets.ALERT_EMAIL_PASSWORD }}

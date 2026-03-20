@@ -43,13 +43,12 @@ def fetch_yfinance(ticker: str) -> dict:
         ma_50 = hist["Close"].tail(50).mean()
         ma_200 = hist["Close"].tail(200).mean() if len(hist) >= 200 else None
 
-        drop_from_52w = ((current_price - high_52w) / high_52w) * 100 if high_52w else 0
-        drop_from_ma50 = ((current_price - ma_50) / ma_50) * 100 if ma_50 else 0
+        drop_from_52w = ((high_52w - current_price) / high_52w) * 100 if high_52w else 0
+        drop_from_ma50 = ((ma_50 - current_price) / ma_50) * 100 if ma_50 else 0
 
         div_yield = info.get("dividendYield") or info.get("yield") or 0
         if div_yield:
-            if div_yield < 1:
-                div_yield *= 100  # convert decimal (0.0292) to percentage (2.92%)
+            div_yield *= 100  # convert to percentage
 
         forward_pe = info.get("forwardPE") or info.get("trailingPE") or None
         trailing_pe = info.get("trailingPE") or None
@@ -79,197 +78,59 @@ def fetch_yfinance(ticker: str) -> dict:
         return {}
 
 
-def fetch_dividend_streak(ticker: str) -> dict:
-    """
-    Compute dividend growth/hold streak from yfinance.
-    Streak counts consecutive years where the annual dividend was
-    equal to or greater than the prior year (no cuts allowed).
-    Also returns payout ratio.
-    """
+def fetch_fmp(ticker: str, api_key: str) -> dict:
+    """Fetch dividend history, payout ratio, historical PE from FMP."""
+    if not api_key or api_key == "YOUR_FMP_API_KEY":
+        return {}
     try:
-        t = yf.Ticker(ticker)
+        # Dividend history
+        div_url = f"https://financialmodelingprep.com/api/v3/historical-price-full/stock_dividend/{ticker}?apikey={api_key}"
+        div_resp = requests.get(div_url, timeout=10).json()
+        dividends = div_resp.get("historical", [])
 
-        # Get full dividend history
-        divs = t.dividends
-        if divs.empty:
-            return {"dividend_streak": 0, "avg_payout_ratio": None}
-
-        # Sum dividends by calendar year
-        divs.index = divs.index.tz_localize(None) if divs.index.tzinfo else divs.index
-        annual = divs.groupby(divs.index.year).sum()
-
-        if len(annual) < 2:
-            return {"dividend_streak": 1 if len(annual) == 1 else 0, "avg_payout_ratio": None}
-
-        # Walk backwards from most recent full year counting unbroken equal-or-growth streak
+        # Calculate streak (consecutive years with at least one dividend)
+        years_paid = set()
+        for d in dividends:
+            try:
+                yr = int(d["date"][:4])
+                if d.get("dividend", 0) > 0:
+                    years_paid.add(yr)
+            except Exception:
+                pass
         current_year = datetime.date.today().year
-        years = sorted(annual.index.tolist(), reverse=True)
-
-        # Skip current partial year if we're not in December
-        if datetime.date.today().month < 12 and years and years[0] == current_year:
-            years = years[1:]
-
         streak = 0
-        for i in range(len(years) - 1):
-            this_year = years[i]
-            prev_year = years[i + 1]
-
-            # Ensure years are consecutive (no gap)
-            if this_year - prev_year != 1:
-                break
-
-            this_div = annual.get(this_year, 0)
-            prev_div = annual.get(prev_year, 0)
-
-            if prev_div <= 0:
-                break
-
-            # Allow up to 2% tolerance for rounding/timing differences
-            if this_div >= prev_div * 0.98:
+        for y in range(current_year, current_year - 30, -1):
+            if y in years_paid:
                 streak += 1
             else:
-                break  # dividend was cut — stop streak
+                break
 
-        # Payout ratio from yfinance info
-        info = t.info
-        payout = info.get("payoutRatio") or None
-        if payout and payout < 10:  # decimal like 0.45
-            payout = round(payout * 100, 1)
-        elif payout:
-            payout = round(payout, 1)
+        # Key metrics
+        metrics_url = f"https://financialmodelingprep.com/api/v3/key-metrics/{ticker}?limit=5&apikey={api_key}"
+        metrics_resp = requests.get(metrics_url, timeout=10).json()
+        historical_pe_values = [m.get("peRatio") for m in metrics_resp if m.get("peRatio")]
+        avg_historical_pe = (sum(historical_pe_values) / len(historical_pe_values)) if historical_pe_values else None
+
+        # Payout ratio
+        fin_url = f"https://financialmodelingprep.com/api/v3/ratios/{ticker}?limit=4&apikey={api_key}"
+        fin_resp = requests.get(fin_url, timeout=10).json()
+        payout_ratios = [r.get("payoutRatio") for r in fin_resp if r.get("payoutRatio")]
+        avg_payout = (sum(payout_ratios) / len(payout_ratios)) if payout_ratios else None
 
         return {
             "dividend_streak": streak,
-            "avg_payout_ratio": payout,
+            "avg_historical_pe": round(avg_historical_pe, 2) if avg_historical_pe else None,
+            "avg_payout_ratio": round(avg_payout * 100, 1) if avg_payout else None,
         }
     except Exception as e:
-        print(f"  [dividend_streak] Error for {ticker}: {e}")
-        return {"dividend_streak": 0, "avg_payout_ratio": None}
-
-
-def fetch_historical_pe(ticker: str) -> dict:
-    """Compute avg historical P/E from yfinance earnings + price history. No API key needed."""
-    try:
-        t = yf.Ticker(ticker)
-
-        # yfinance earnings history — quarterly EPS rolled up to annual
-        earnings = t.income_stmt  # annual income statement
-        price_hist = t.history(period="10y", interval="1mo")
-
-        if earnings is None or earnings.empty or price_hist.empty:
-            return {}
-
-        pe_vals = []
-
-        # earnings columns are fiscal year-end dates
-        for col in earnings.columns[:8]:  # up to 8 years back
-            try:
-                # Get diluted EPS or net income / shares
-                eps = None
-                if "Diluted EPS" in earnings.index:
-                    eps = float(earnings.loc["Diluted EPS", col])
-                elif "Basic EPS" in earnings.index:
-                    eps = float(earnings.loc["Basic EPS", col])
-
-                if not eps or eps <= 0:
-                    continue
-
-                # Find stock price closest to that fiscal year end date
-                target = col.to_pydatetime().replace(tzinfo=None)
-                idx = price_hist.index.tz_localize(None) if price_hist.index.tzinfo else price_hist.index
-                window_mask = (
-                    (idx >= target - datetime.timedelta(days=45)) &
-                    (idx <= target + datetime.timedelta(days=45))
-                )
-                window = price_hist[window_mask]
-                if window.empty:
-                    continue
-
-                price_at_date = float(window["Close"].iloc[-1])
-                pe = price_at_date / eps
-                if 3 < pe < 200:  # filter nonsensical values
-                    pe_vals.append(round(pe, 2))
-            except Exception:
-                continue
-
-        if not pe_vals:
-            return {}
-
-        avg_pe = sum(pe_vals) / len(pe_vals)
-        return {"avg_historical_pe": round(avg_pe, 2)}
-
-    except Exception as e:
-        print(f"  [historical_pe] Error for {ticker}: {e}")
+        print(f"  [FMP] Error for {ticker}: {e}")
         return {}
-
-
-def fetch_analyst_rating(ticker: str) -> dict:
-    """
-    Pull analyst consensus rating from yfinance — no API key or scraping needed.
-    Uses the recommendations_summary which gives Buy/Hold/Sell counts.
-    """
-    try:
-        t = yf.Ticker(ticker)
-        info = t.info
-
-        # yfinance provides recommendationMean (1=Strong Buy, 5=Strong Sell)
-        # and recommendationKey (e.g. "buy", "hold", "sell")
-        rec_mean = info.get("recommendationMean")
-        rec_key  = info.get("recommendationKey") or ""
-        num_analysts = info.get("numberOfAnalystOpinions") or 0
-        target_price = info.get("targetMeanPrice")
-
-        if rec_mean is None:
-            return {
-                "sentiment_label": "— N/A",
-                "sentiment_score": 50,
-                "news_headlines": [],
-                "analyst_recommendation": "No analyst coverage"
-            }
-
-        # Map mean score to label
-        if rec_mean <= 1.5:
-            label = "Strong Buy 🟢"
-            score = 15
-        elif rec_mean <= 2.5:
-            label = "Buy 🟢"
-            score = 30
-        elif rec_mean <= 3.5:
-            label = "Hold 🟡"
-            score = 50
-        elif rec_mean <= 4.5:
-            label = "Sell 🔴"
-            score = 70
-        else:
-            label = "Strong Sell 🔴"
-            score = 85
-
-        rec_str = f"{rec_mean:.1f}/5.0"
-        if num_analysts:
-            rec_str += f" ({num_analysts} analysts)"
-        if target_price:
-            rec_str += f" · Target ${target_price:.2f}"
-
-        return {
-            "sentiment_label": label,
-            "sentiment_score": score,
-            "news_headlines": [],
-            "analyst_recommendation": rec_str,
-        }
-    except Exception as e:
-        print(f"  [analyst_rating] Error for {ticker}: {e}")
-        return {
-            "sentiment_label": "— N/A",
-            "sentiment_score": 50,
-            "news_headlines": [],
-            "analyst_recommendation": "—"
-        }
 
 
 def fetch_news_sentiment(sector: str, ticker: str, api_key: str) -> dict:
     """Fetch recent news and compute a simple sentiment score."""
     if not api_key or api_key == "YOUR_NEWSAPI_KEY":
-        return {"sentiment_score": 50, "news_headlines": [], "sentiment_label": "— no key"}
+        return {"sentiment_score": 50, "news_headlines": [], "sentiment_label": "Neutral"}
     try:
         query = f"{ticker} stock"
         url = (
@@ -280,24 +141,15 @@ def fetch_news_sentiment(sector: str, ticker: str, api_key: str) -> dict:
         articles = resp.get("articles", [])
 
         negative_words = [
-            r"\bcrash\b", r"\bplunge\b", r"\bplunges\b", r"\bdecline\b", r"\bdeclines\b",
-            r"\bslump\b", r"\bslumps\b", r"\bfear\b", r"\bpanic\b", r"\brecession\b",
-            r"\bdowngrade\b", r"\bdowngrades\b", r"\bwarning\b", r"\bthreat\b",
-            r"\bdisappoint\b", r"\bdisappoints\b", r"\bdisappointing\b",
-            r"\bmiss\b", r"\bmisses\b", r"\bloss\b", r"\blosses\b",
-            r"\bcuts dividend\b", r"\bdividend cut\b", r"\bsells off\b",
-            r"\bsell.?off\b", r"\bweakness\b", r"\bweak results\b",
+            "crash", "plunge", "fall", "drop", "decline", "sell", "concern",
+            "worry", "risk", "loss", "cut", "slump", "fear", "panic", "recession",
+            "downgrade", "warning", "threat", "weak", "miss", "disappoint"
         ]
         positive_words = [
-            r"\bgain\b", r"\bgains\b", r"\bbeat\b", r"\bbeats\b",
-            r"\bupgrade\b", r"\bupgrades\b", r"\brally\b", r"\brallies\b",
-            r"\bsurge\b", r"\bsurges\b", r"\bprofit\b", r"\bprofits\b",
-            r"\boutperform\b", r"\boutperforms\b", r"\bdividend increase\b",
-            r"\braises dividend\b", r"\bstrong earnings\b", r"\brecord earnings\b",
-            r"\brecord profit\b", r"\brecord revenue\b",
+            "rise", "gain", "beat", "strong", "growth", "buy", "upgrade",
+            "rally", "surge", "record", "profit", "boost", "outperform"
         ]
 
-        import re
         neg_count = 0
         pos_count = 0
         headlines = []
@@ -305,22 +157,22 @@ def fetch_news_sentiment(sector: str, ticker: str, api_key: str) -> dict:
         for a in articles[:10]:
             title = (a.get("title") or "").lower()
             headlines.append(a.get("title", ""))
-            neg_count += sum(1 for w in negative_words if re.search(w, title))
-            pos_count += sum(1 for w in positive_words if re.search(w, title))
+            neg_count += sum(1 for w in negative_words if w in title)
+            pos_count += sum(1 for w in positive_words if w in title)
 
         total = neg_count + pos_count
         if total == 0:
             sentiment_score = 50
-            label = "Neutral"
         else:
             # High negative sentiment = LOW score = higher opportunity
             sentiment_score = int((pos_count / total) * 100)
-            if sentiment_score < 30:
-                label = "Bearish 📉"
-            elif sentiment_score < 60:
-                label = "Mixed"
-            else:
-                label = "Bullish 📈"
+
+        if sentiment_score < 35:
+            label = "Bearish 📉"
+        elif sentiment_score < 55:
+            label = "Mixed"
+        else:
+            label = "Bullish 📈"
 
         return {
             "sentiment_score": sentiment_score,
@@ -353,13 +205,13 @@ def compute_opportunity_score(data: dict, thresholds: dict) -> dict:
         "sentiment": 0.15,
     }
 
-    # 1. Drop from 52-week high (negative = below high = opportunity)
-    drop_52w = abs(min(data.get("drop_from_52w", 0), 0))  # only count drops, not gains
+    # 1. Drop from 52-week high
+    drop_52w = data.get("drop_from_52w", 0)
     ticker_threshold = thresholds.get("drop_threshold_pct", 10)
     scores["drop_52w"] = min(100, (drop_52w / ticker_threshold) * 100)
 
-    # 2. Drop from 50-day MA (negative = below MA = opportunity)
-    drop_ma = abs(min(data.get("drop_from_ma50", 0), 0))
+    # 2. Drop from 50-day MA
+    drop_ma = data.get("drop_from_ma50", 0)
     scores["drop_ma50"] = min(100, (drop_ma / 8) * 100)
 
     # 3. Yield signal — if yield >= min_yield, scale up; cap at 150% of min
@@ -391,16 +243,16 @@ def compute_opportunity_score(data: dict, thresholds: dict) -> dict:
 
     # Opportunity tier
     if composite >= 70:
-        tier = "Strong Buy"
+        tier = "🔥 Strong Buy Signal"
         tier_class = "tier-strong"
     elif composite >= 50:
-        tier = "Watch List"
+        tier = "👀 Watch List"
         tier_class = "tier-watch"
     elif composite >= 30:
         tier = "⏳ Hold"
         tier_class = "tier-hold"
     else:
-        tier = "Fairly Valued"
+        tier = "✅ Fairly Valued"
         tier_class = "tier-fair"
 
     return {
@@ -461,7 +313,7 @@ def generate_html(results: list, config: dict, generated_at: str) -> str:
     rows = ""
     for r in results:
         score = r.get("opportunity_score", 0)
-        bar_color = "#4ade80" if score >= 70 else "#f59e0b" if score >= 50 else "#6b7280"
+        bar_color = "#ef4444" if score >= 70 else "#f59e0b" if score >= 50 else "#6b7280"
         rows += f"""
         <tr class="data-row" data-ticker="{r['ticker']}" onclick="toggleDetail('{r['ticker']}')">
           <td class="ticker-cell">
@@ -478,9 +330,9 @@ def generate_html(results: list, config: dict, generated_at: str) -> str:
           </td>
           <td><span class="tier-badge {r.get('tier_class','')}">{r.get('tier','')}</span></td>
           <td class="num">{r.get('div_yield', 'N/A')}%</td>
-          <td class="num">{r.get('dividend_streak', '—')}{' yrs' if r.get('dividend_streak') else ''}</td>
-          <td class="num">{f"{r['drop_from_52w']:.1f}%" if isinstance(r.get('drop_from_52w'), (int,float)) else '—'}</td>
-          <td class="num">{f"{r['drop_from_ma50']:.1f}%" if isinstance(r.get('drop_from_ma50'), (int,float)) else '—'}</td>
+          <td class="num">{r.get('dividend_streak', '—')}</td>
+          <td class="num {'drop-high' if (r.get('drop_from_52w') or 0) >= 10 else ''}">{r.get('drop_from_52w', '—')}%</td>
+          <td class="num">{r.get('drop_from_ma50', '—')}%</td>
           <td class="num">{r.get('forward_pe', '—')}</td>
           <td class="num">{r.get('avg_historical_pe', '—')}</td>
           <td>{r.get('sentiment_label', '—')}</td>
@@ -496,7 +348,7 @@ def generate_html(results: list, config: dict, generated_at: str) -> str:
                 <div class="detail-block">
                   <h4>💰 Dividend Details</h4>
                   <p>Current Yield: <strong>{r.get('div_yield','—')}%</strong></p>
-                  <p>Growth/Hold Streak: <strong>{r.get('dividend_streak','—')} yrs</strong> (no cuts)</p>
+                  <p>Dividend Streak: <strong>{r.get('dividend_streak','—')} years</strong></p>
                   <p>Payout Ratio: <strong>{r.get('avg_payout_ratio','—')}%</strong></p>
                 </div>
                 <div class="detail-block">
@@ -513,9 +365,8 @@ def generate_html(results: list, config: dict, generated_at: str) -> str:
                   <p>200-Day MA: <strong>${r.get('ma_200','—')}</strong></p>
                 </div>
                 <div class="detail-block news-block">
-                  <h4>📊 Analyst Rating</h4>
-                  <p>Consensus: <strong>{r.get('sentiment_label','—')}</strong></p>
-                  <p>Recommendation: <strong>{r.get('analyst_recommendation','—')}</strong></p>
+                  <h4>📰 Recent News Sentiment</h4>
+                  <p>Sentiment: <strong>{r.get('sentiment_label','—')}</strong></p>
                   {"".join(f'<p class="headline">• {h}</p>' for h in r.get('news_headlines', []))}
                 </div>
               </div>
@@ -727,10 +578,10 @@ def generate_html(results: list, config: dict, generated_at: str) -> str:
     font-weight: 500;
     white-space: nowrap;
   }}
-  .tier-strong {{ background: #14291e; color: #4ade80; border: 1px solid #166534; }}
+  .tier-strong {{ background: #3f1515; color: #f87171; border: 1px solid #7f1d1d; }}
   .tier-watch  {{ background: #3f2d00; color: #fbbf24; border: 1px solid #78350f; }}
   .tier-hold   {{ background: #1e293b; color: #94a3b8; border: 1px solid #334155; }}
-  .tier-fair   {{ background: #3f1515; color: #f87171; border: 1px solid #7f1d1d; }}
+  .tier-fair   {{ background: #14291e; color: #4ade80; border: 1px solid #166534; }}
 
   /* Detail panel */
   .detail-row td {{ padding: 0; }}
@@ -873,12 +724,12 @@ def generate_html(results: list, config: dict, generated_at: str) -> str:
         <th>Opp. Score ▼</th>
         <th>Signal</th>
         <th class="num">Yield</th>
-        <th class="num">Growth Streak</th>
+        <th class="num">Streak</th>
         <th class="num">vs 52W Hi</th>
         <th class="num">vs MA50</th>
         <th class="num">Fwd P/E</th>
         <th class="num">Hist P/E</th>
-        <th>Analyst Rating</th>
+        <th>Sentiment</th>
       </tr>
     </thead>
     <tbody id="table-body">
@@ -895,7 +746,7 @@ def generate_html(results: list, config: dict, generated_at: str) -> str:
   <span>Config: <strong>Min Yield {min_yield}%</strong></span>
   <span>Alert Threshold: <strong>Score ≥ {score_threshold}</strong></span>
   <span>Min Streak: <strong>{min_streak} years</strong></span>
-  <span>Data: <strong>yfinance + NewsAPI + Finviz</strong></span>
+  <span>Data: <strong>yfinance + FMP + NewsAPI</strong></span>
 </div>
 
 <script>
@@ -1053,6 +904,7 @@ def main():
     args = parser.parse_args()
 
     config = load_config()
+    fmp_key = os.environ.get("FMP_API_KEY") or config.get("api_keys", {}).get("fmp", "")
     news_key = os.environ.get("NEWSAPI_KEY") or config.get("api_keys", {}).get("newsapi", "")
 
     # Build ticker list
@@ -1078,14 +930,10 @@ def main():
             print(f"    ⚠️  No data for {ticker}, skipping.")
             continue
 
-        streak_data = fetch_dividend_streak(ticker)
-        av_data = fetch_historical_pe(ticker)
-        # Try Finviz analyst rating first; fall back to NewsAPI sentiment
-        sentiment_data = fetch_analyst_rating(ticker)
-        if sentiment_data.get("sentiment_label") == "— N/A" and news_key:
-            sentiment_data = fetch_news_sentiment(yf_data.get("sector", ""), ticker, news_key)
+        fmp_data = fetch_fmp(ticker, fmp_key)
+        sentiment_data = fetch_news_sentiment(yf_data.get("sector", ""), ticker, news_key)
 
-        merged = {**yf_data, **streak_data, **av_data, **sentiment_data}
+        merged = {**yf_data, **fmp_data, **sentiment_data}
 
         # Apply quality filters
         min_yield = config["screening"]["min_yield_pct"]
